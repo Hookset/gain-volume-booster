@@ -28,6 +28,15 @@
     "storage",
     "activeTab"
   ],
+  "browser_specific_settings": {
+    "gecko": {
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [],
+        "optional": []
+      }
+    }
+  },
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
