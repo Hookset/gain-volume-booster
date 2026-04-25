@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Volume Master — Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --blue: #3b82f6;
+      --blue-light: #dbeafe;
+      --blue-dark: #1d4ed8;
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --danger: #ef4444;
+      --danger-light: #fee2e2;
+      --green: #22c55e;
+      --radius: 10px;
+      --sidebar-w: 200px;
+    }
+
+    body.dark {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --border: #334155;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --blue-light: #1e3a5f;
+      --active-btn: #1e3a5f;
+      --danger-light: #450a0a;
+    }
+
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      height: 56px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .topbar-logo { font-size: 22px; }
+    .topbar h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+    .topbar-spacer { flex: 1; }
+
+    /* Dark mode toggle */
+    .dark-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .toggle-track {
+      width: 36px;
+      height: 20px;
+      background: var(--border);
+      border-radius: 10px;
+      position: relative;
+      transition: background 0.2s;
+    }
+    .toggle-track.on { background: var(--blue); }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 14px;
+      height: 14px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+    /* ── Layout ── */
+    .layout {
+      display: flex;
+      flex: 1;
+      max-width: 860px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 24px;
+      gap: 28px;
+    }
+
+    /* ── Sidebar nav ── */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+    }
+
+    .nav-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      padding: 0 10px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.12s;
+      margin-bottom: 2px;
+    }
+
+    .nav-item:hover { background: var(--border); color: var(--text); }
+    .nav-item.active { background: var(--blue-light); color: var(--blue); font-weight: 600; }
+    .nav-icon { font-size: 15px; width: 18px; text-align: center; }
+
+    /* ── Main content ── */
+    .main { flex: 1; min-width: 0; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .panel-title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+      margin-bottom: 4px;
+    }
+
+    .panel-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      color: var(--text);
+    }
+
+    /* ── Domain input row ── */
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .domain-input {
+      flex: 1;
+      padding: 9px 13px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .domain-input:focus { border-color: var(--blue); }
+    .domain-input::placeholder { color: var(--text-muted); }
+
+    .btn-add {
+      padding: 9px 16px;
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s;
+    }
+    .btn-add:hover { background: var(--blue-dark); }
+
+    /* ── Domain list ── */
+    .domain-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .domain-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+    .domain-name { font-family: monospace; font-size: 13px; }
+
+    .btn-remove {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.12s;
+    }
+    .btn-remove:hover { background: var(--danger-light); color: var(--danger); }
+
+    .empty-state {
+      text-align: center;
+      padding: 24px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    /* ── Mode toggle card ── */
+    .mode-options {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .mode-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px;
+      border: 2px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .mode-option:hover { border-color: var(--blue); }
+    .mode-option.selected { border-color: var(--blue); background: var(--blue-light); }
+
+    .mode-radio {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      margin-top: 1px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+    .mode-option.selected .mode-radio {
+      border-color: var(--blue);
+      background: var(--blue);
+    }
+    .mode-option.selected .mode-radio::after {
+      content: '';
+      width: 7px;
+      height: 7px;
+      background: white;
+      border-radius: 50%;
+    }
+
+    .mode-text strong {
+      display: block;
+      font-size: 13.5px;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+    .mode-text span { font-size: 12.5px; color: var(--text-muted); line-height: 1.5; }
+
+    /* ── General settings rows ── */
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .setting-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+    .setting-info strong { display: block; font-size: 13.5px; font-weight: 500; margin-bottom: 2px; }
+    .setting-info span { font-size: 12px; color: var(--text-muted); }
+
+    .small-toggle-track {
+      width: 36px;
+      height: 20px;
+      background: var(--border);
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .small-toggle-track.on { background: var(--blue); }
+    .small-toggle-track .toggle-thumb {
+      position: absolute;
+      top: 3px; left: 3px;
+      width: 14px; height: 14px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .small-toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+    /* Default volume setting */
+    .default-vol-row {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .default-vol-row .setting-info { width: 100%; }
+
+    .vol-setting {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+    }
+    .vol-setting input[type="range"] {
+      -webkit-appearance: none;
+      flex: 1;
+      min-width: 0;
+      height: 5px;
+      border-radius: 4px;
+      background: linear-gradient(to right, var(--blue) 16.67%, var(--border) 16.67%);
+      outline: none;
+      cursor: pointer;
+    }
+    .vol-setting input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 15px; height: 15px;
+      border-radius: 50%;
+      background: var(--blue);
+      cursor: pointer;
+      transition: transform 0.1s;
+    }
+    .vol-setting input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.15);
+    }
+    .vol-val {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--blue);
+      min-width: 46px;
+      text-align: right;
+      cursor: text;
+      padding: 2px 5px;
+      border-radius: 5px;
+      transition: background 0.15s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .vol-val:hover { background: var(--blue-light); }
+
+    .vol-val-input {
+      width: 58px;
+      flex-shrink: 0;
+      padding: 2px 5px;
+      border: 1.5px solid var(--blue);
+      border-radius: 5px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--bg);
+      text-align: center;
+      outline: none;
+      display: none;
+    }
+    .vol-val-input.visible { display: inline-block; }
+
+    .btn-vol-reset {
+      background: none;
+      border: 1.5px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 14px;
+      color: var(--text-muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .btn-vol-reset:hover {
+      border-color: var(--blue);
+      color: var(--blue);
+      background: var(--blue-light);
+    }
+
+    /* Amber: 300–450%, Red: 451–600% */
+    .vol-warning {
+      font-size: 12px;
+      color: #92400e;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 7px;
+      padding: 8px 12px;
+      margin-top: 4px;
+      display: none;
+      line-height: 1.6;
+    }
+    .vol-warning.red {
+      color: #7f1d1d;
+      background: #fee2e2;
+      border-color: #ef4444;
+    }
+    body.dark .vol-warning {
+      background: #422006;
+      color: #fcd34d;
+      border-color: #d97706;
+    }
+    body.dark .vol-warning.red {
+      background: #450a0a;
+      color: #fca5a5;
+      border-color: #ef4444;
+    }
+    .vol-warning.show { display: block; }
+
+    /* Health warning card */
+    .health-warning-card {
+      border-color: #f59e0b;
+      background: #fffbeb;
+    }
+    body.dark .health-warning-card {
+      border-color: #d97706;
+      background: #1c1408;
+    }
+    .health-warning-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #92400e;
+      margin-bottom: 12px;
+    }
+    body.dark .health-warning-title { color: #fcd34d; }
+    .health-warning-card p {
+      font-size: 13px;
+      color: #78350f;
+      line-height: 1.65;
+      margin-bottom: 10px;
+    }
+    .health-warning-card p:last-child { margin-bottom: 0; }
+    body.dark .health-warning-card p { color: #fde68a; }
+
+    /* ── About ── */
+    .about-logo { font-size: 48px; text-align: center; margin-bottom: 12px; }
+    .about-name { text-align: center; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .about-ver { text-align: center; font-size: 13px; color: var(--text-muted); margin-bottom: 28px; }
+    .about-section { font-size: 13.5px; line-height: 1.7; color: var(--text-muted); margin-bottom: 16px; }
+    .about-section strong { color: var(--text); }
+
+    .privacy-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      font-size: 13px;
+      line-height: 1.75;
+      color: var(--text-muted);
+    }
+    .privacy-box strong.privacy-title {
+      color: var(--text);
+      display: block;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }
+    .privacy-box p {
+      margin-bottom: 10px;
+    }
+    .privacy-box p:last-child { margin-bottom: 0; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #1e293b;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.2s;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <span class="topbar-logo">🔊</span>
+  <h1>Volume Master — Settings</h1>
+  <div class="topbar-spacer"></div>
+  <label class="dark-toggle" id="darkToggle">
+    <span>🌙 Dark mode</span>
+    <div class="toggle-track" id="darkTrack">
+      <div class="toggle-thumb"></div>
+    </div>
+  </label>
+</div>
+
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="nav-label">Settings</div>
+    <div class="nav-item active" data-tab="general">
+      <span class="nav-icon">⚙️</span> General
+    </div>
+    <div class="nav-item" data-tab="blacklist">
+      <span class="nav-icon">🚫</span> Blacklist
+    </div>
+    <div class="nav-item" data-tab="whitelist">
+      <span class="nav-icon">✅</span> Whitelist
+    </div>
+    <div class="nav-item" data-tab="about">
+      <span class="nav-icon">ℹ️</span> About
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Blacklist -->
+    <div class="tab-panel" id="panel-blacklist">
+      <div class="panel-title">Blacklist</div>
+      <p class="panel-desc">Volume Master will be <strong>disabled</strong> on these sites. Audio on blacklisted pages will play normally without any gain control.</p>
+
+      <div class="card">
+        <div class="input-row">
+          <input class="domain-input" id="blacklistInput" type="text" placeholder="example.com" />
+          <button class="btn-add" id="blacklistAdd">+ Add site</button>
+        </div>
+        <div class="domain-list" id="blacklistList"></div>
+      </div>
+    </div>
+
+    <!-- Whitelist -->
+    <div class="tab-panel" id="panel-whitelist">
+      <div class="panel-title">Whitelist</div>
+      <p class="panel-desc">When <strong>Whitelist mode</strong> is enabled in General settings, Volume Master will <em>only</em> operate on these sites. All other sites are untouched.</p>
+
+      <div class="card">
+        <div class="input-row">
+          <input class="domain-input" id="whitelistInput" type="text" placeholder="example.com" />
+          <button class="btn-add" id="whitelistAdd">+ Add site</button>
+        </div>
+        <div class="domain-list" id="whitelistList"></div>
+      </div>
+    </div>
+
+    <!-- General -->
+    <div class="tab-panel active" id="panel-general">
+      <div class="panel-title">General Settings</div>
+      <p class="panel-desc">Configure how Volume Master behaves across your browser.</p>
+
+      <!-- Mode -->
+      <div class="card">
+        <div class="card-title">Filter Mode</div>
+        <div class="mode-options">
+          <div class="mode-option selected" id="modeBlacklist">
+            <div class="mode-radio"></div>
+            <div class="mode-text">
+              <strong>🚫 Blacklist mode <span style="font-weight:400;color:var(--blue);font-size:11px;">Default</span></strong>
+              <span>Volume Master works everywhere <em>except</em> sites on your blacklist. Best for most users.</span>
+            </div>
+          </div>
+          <div class="mode-option" id="modeWhitelist">
+            <div class="mode-radio"></div>
+            <div class="mode-text">
+              <strong>✅ Whitelist mode</strong>
+              <span>Volume Master <em>only</em> works on sites you've explicitly whitelisted. Maximum privacy.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Other settings -->
+      <div class="card">
+        <div class="card-title">Preferences</div>
+
+        <div class="setting-row default-vol-row">
+          <div class="setting-info">
+            <strong>Default volume for new tabs</strong>
+            <span>Volume level applied when you open the extension on a new tab</span>
+          </div>
+          <div class="vol-setting">
+            <input type="range" id="defaultVolSlider" min="0" max="600" value="100" />
+            <span class="vol-val" id="defaultVolVal" title="Click to type a value">100%</span>
+            <input class="vol-val-input" id="defaultVolInput" type="number" min="0" max="600" />
+            <button class="btn-vol-reset" id="defaultVolReset" title="Reset to 100%">↺</button>
+          </div>
+        </div>
+        <div class="vol-warning" id="defaultVolWarning">
+          ⚠️ Volumes above 250% are not recommended and may cause audio distortion or clipping. Prolonged exposure to high audio levels can result in hearing damage or conditions such as tinnitus.
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <strong>Show audio tabs list</strong>
+            <span>Display tabs playing audio in the popup</span>
+          </div>
+          <div class="small-toggle-track on" id="toggleAudioTabs">
+            <div class="toggle-thumb"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <strong>Remember volume per site</strong>
+            <span>Restore your last volume setting when revisiting a site</span>
+          </div>
+          <div class="small-toggle-track" id="toggleRemember">
+            <div class="toggle-thumb"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <strong>Show support button</strong>
+            <span>Display the ❤️ donate button at the bottom of the popup</span>
+          </div>
+          <div class="small-toggle-track on" id="toggleDonate">
+            <div class="toggle-thumb"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Health warning card -->
+      <div class="card health-warning-card">
+        <div class="health-warning-title">⚠️ Audio Safety Warning</div>
+        <p>Audio levels above <strong>250%</strong> are <strong>not recommended</strong> for regular use.</p>
+        <p>Prolonged exposure to high volume levels can cause permanent hearing damage, tinnitus (ringing in the ears), hyperacusis, or other auditory conditions. Use boosted volumes with caution and keep listening sessions short.</p>
+        <p>Audio above 250% may also cause distortion or clipping depending on the source quality and your output device.</p>
+      </div>
+
+    </div>
+
+    <!-- About -->
+    <div class="tab-panel" id="panel-about">
+      <div class="about-logo">🔊</div>
+      <div class="about-name">Volume Master</div>
+      <div class="about-ver">Version 1.0.0 · Firefox Extension</div>
+
+      <div class="card">
+        <div class="about-section">
+          <strong>What it does</strong><br/>
+          Volume Master uses the Web Audio API to route your browser's audio through a gain node, allowing volume control from 0% to 600% — far beyond the browser's built-in limit. Bass Boost and Voice Boost apply equalizer filters to enhance your listening experience.
+        </div>
+        <div class="about-section">
+          <strong>Permissions explained</strong><br/>
+          The extension requests access to <code>&lt;all_urls&gt;</code> so it can inject the audio gain node into any page you visit. Without this, it couldn't boost volume on most sites. Your blacklist and whitelist settings let you restrict which sites it actually operates on.
+        </div>
+        <div class="privacy-box">
+          <strong class="privacy-title">🔒 Privacy Policy</strong>
+          <p>This extension collects <strong>no personal data</strong>.</p>
+          <p>It does not track your browsing, send any information to external servers, or share anything with third parties.</p>
+          <p>All settings (blacklist, whitelist, volume preferences) are stored locally on your device using Firefox's built-in storage API and never leave your browser.</p>
+          <p>This extension was originally made for personal use due to lack of options on Firefox extensions, but I have decided to share after considering that there are many others probably looking for the same thing.</p>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="options.js"></script>
+</body>
+</html>
