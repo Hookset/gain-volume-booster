@@ -63,7 +63,7 @@ Volume changes are sent from the popup to the content script via `browser.tabs.s
 
 ## Troubleshooting
 
-Sometimes when the extension first opens or activates, audio can briefly sound echoey, robotic, or otherwise bugged. If that happens, refresh the page or reset the extension and it should clear up.
+Sometimes when the extension first opens or activates, audio can sound echoey, robotic, or otherwise bugged. If that happens, refresh the page or reset the extension — this should clear it up.
 
 ---
 
