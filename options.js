@@ -16,6 +16,43 @@ function normalizeDomain(raw) {
     .replace(/\/.*$/, '');
 }
 
+function isIPv4Hostname(hostname) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function getSitePatterns(hostname) {
+  if (!hostname) return [];
+
+  const exact = `*://${hostname}/*`;
+  if (hostname === 'localhost' || hostname.includes(':') || isIPv4Hostname(hostname) || !hostname.includes('.')) {
+    return [exact];
+  }
+
+  return [exact, `*://*.${hostname}/*`];
+}
+
+async function requestSitePermission(hostname) {
+  const patterns = getSitePatterns(hostname);
+  if (!patterns.length) return false;
+
+  try {
+    return await browser.permissions.request({ origins: patterns });
+  } catch (e) {
+    return false;
+  }
+}
+
+async function removeSitePermission(hostname) {
+  const patterns = getSitePatterns(hostname);
+  if (!patterns.length) return false;
+
+  try {
+    return await browser.permissions.remove({ origins: patterns });
+  } catch (e) {
+    return false;
+  }
+}
+
 // ── Dark mode ─────────────────────────────────────────
 
 const darkTrack = document.getElementById('darkTrack');
@@ -64,9 +101,12 @@ function renderList(listEl, domains, storageKey) {
     removeBtn.title = 'Remove';
     removeBtn.textContent = '✕';
 
-    removeBtn.addEventListener('click', () => {
+    removeBtn.addEventListener('click', async () => {
       const idx = domains.indexOf(domain);
       if (idx !== -1) domains.splice(idx, 1);
+      if (storageKey === 'whitelist') {
+        await removeSitePermission(domain);
+      }
       browser.storage.local.set({ [storageKey]: domains });
       renderList(listEl, domains, storageKey);
       showToast('Site removed');
@@ -113,10 +153,37 @@ browser.storage.local.get('whitelist', (d) => {
   renderList(whitelistList, whitelist, 'whitelist');
 });
 
-function addWhitelist() {
+browser.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+
+  if (changes.blacklist) {
+    blacklist = changes.blacklist.newValue || [];
+    renderList(blacklistList, blacklist, 'blacklist');
+  }
+
+  if (changes.whitelist) {
+    whitelist = changes.whitelist.newValue || [];
+    renderList(whitelistList, whitelist, 'whitelist');
+  }
+
+  if (changes.mode) {
+    const mode = changes.mode.newValue || 'blacklist';
+    modeBlacklist.classList.toggle('selected', mode === 'blacklist');
+    modeWhitelist.classList.toggle('selected', mode === 'whitelist');
+  }
+});
+
+async function addWhitelist() {
   const domain = normalizeDomain(whitelistInput.value);
   if (!domain) return;
   if (whitelist.includes(domain)) { showToast('Already in list'); return; }
+
+  const granted = await requestSitePermission(domain);
+  if (!granted) {
+    showToast('Site access not granted');
+    return;
+  }
+
   whitelist.unshift(domain);
   browser.storage.local.set({ whitelist });
   renderList(whitelistList, whitelist, 'whitelist');
