@@ -584,7 +584,7 @@
     <!-- Whitelist -->
     <div class="tab-panel" id="panel-whitelist">
       <div class="panel-title">Whitelist</div>
-      <p class="panel-desc">When <strong>Whitelist mode</strong> is enabled in General settings, Gain will <em>only</em> operate on these sites. All other sites are untouched.</p>
+      <p class="panel-desc">These sites are allowed to auto-start Gain after you grant Firefox access. In <strong>Whitelist mode</strong>, Gain will only operate on sites listed here.</p>
 
       <div class="card">
         <div class="input-row">
@@ -608,14 +608,14 @@
             <div class="mode-radio"></div>
             <div class="mode-text">
               <strong>🚫 Blacklist mode <span style="font-weight:400;color:var(--blue);font-size:11px;">Default</span></strong>
-              <span>Gain works everywhere <em>except</em> sites on your blacklist. Best for most users.</span>
+              <span>Gain can be activated from the toolbar on any site except those on your blacklist. Whitelisted sites can also auto-start after permission is granted.</span>
             </div>
           </div>
           <div class="mode-option" id="modeWhitelist">
             <div class="mode-radio"></div>
             <div class="mode-text">
               <strong>✅ Whitelist mode</strong>
-              <span>Gain <em>only</em> works on sites you've explicitly whitelisted. Only runs on approved sites.</span>
+              <span>Gain <em>only</em> works on sites you've explicitly whitelisted, and those sites can auto-start once Firefox access is granted.</span>
             </div>
           </div>
         </div>
@@ -692,7 +692,7 @@
     <div class="tab-panel" id="panel-about">
       <div class="about-logo">🔊</div>
       <div class="about-name">Gain</div>
-      <div class="about-ver">Version 1.0.0 · Firefox Extension</div>
+      <div class="about-ver">Version 1.0.1 · Firefox Extension</div>
 
       <div class="card">
         <div class="about-section">
@@ -701,7 +701,7 @@
         </div>
         <div class="about-section">
           <strong>Permissions explained</strong><br/>
-          The extension requests access to <code>&lt;all_urls&gt;</code> so it can inject the audio gain node into any page you visit. Without this, it couldn't boost volume on most sites. Your blacklist and whitelist settings let you restrict which sites it actually operates on.
+          Gain uses temporary access when you click the toolbar on a tab, and it requests persistent Firefox access only for sites you explicitly whitelist. That keeps per-site auto-start optional instead of requesting blanket access to every website.
         </div>
         <div class="privacy-box">
           <strong class="privacy-title">🔒 Privacy Policy</strong>

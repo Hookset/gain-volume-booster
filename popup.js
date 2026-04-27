@@ -1,5 +1,3 @@
-// popup.js
-
 const slider = document.getElementById('volumeSlider');
 const volDisplay = document.getElementById('volDisplay');
 const volInput = document.getElementById('volInput');
@@ -12,25 +10,50 @@ const tabsList = document.getElementById('tabsList');
 const blockedBanner = document.getElementById('blockedBanner');
 const btnDonate = document.getElementById('btnDonate');
 const donateBar = document.getElementById('donateBar');
-
-browser.storage.local.get('darkMode', (d) => {
-  if (d.darkMode) {
-    document.body.classList.add('dark');
-    document.getElementById('btnDark').textContent = '☀️';
-  }
-});
-
-document.getElementById('btnDark').addEventListener('click', () => {
-  const on = !document.body.classList.contains('dark');
-  document.body.classList.toggle('dark', on);
-  document.getElementById('btnDark').textContent = on ? '☀️' : '🌙';
-  browser.storage.local.set({ darkMode: on });
-});
+const siteAccessBox = document.getElementById('siteAccessBox');
+const siteAccessText = document.getElementById('siteAccessText');
+const btnAllowSite = document.getElementById('btnAllowSite');
+const btnDismissSiteAccess = document.getElementById('btnDismissSiteAccess');
 
 let currentTabId = null;
-let currentHostname = null;
+let currentHostname = '';
+let currentUrl = '';
+let currentMode = 'blacklist';
+let blacklist = [];
+let whitelist = [];
 let voiceActive = false;
 let bassActive = false;
+let controlsEnabled = false;
+let siteAccessDismissed = false;
+const DEFAULT_AUDIO_STATE = { volume: 100, bass: false, voice: false };
+
+function normalizeHostname(hostname) {
+  return (hostname || '').replace(/^www\./, '');
+}
+
+function isIPv4Hostname(hostname) {
+  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+}
+
+function getSitePatterns(hostname) {
+  const normalized = normalizeHostname(hostname);
+  if (!normalized) return [];
+
+  const exact = `*://${normalized}/*`;
+  if (normalized === 'localhost' || normalized.includes(':') || isIPv4Hostname(normalized) || !normalized.includes('.')) {
+    return [exact];
+  }
+
+  return [exact, `*://*.${normalized}/*`];
+}
+
+function matchesList(list, hostname) {
+  return list.some((domain) => hostname === domain || hostname.endsWith('.' + domain));
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function updateSliderFill(val) {
   const pct = (val / 600) * 100;
@@ -43,48 +66,64 @@ function updateSliderFill(val) {
 
 function sendBadge(volume) {
   if (currentTabId === null) return;
-  browser.runtime.sendMessage({ type: 'SET_BADGE', tabId: currentTabId, volume });
+  browser.runtime.sendMessage({ type: 'SET_BADGE', tabId: currentTabId, volume }).catch(() => {});
 }
 
 function sendVolume(tabId, volume) {
-  browser.tabs.sendMessage(tabId, { type: 'SET_VOLUME', value: volume }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: 'SET_VOLUME', value: volume }).catch(() => {});
 }
 
 function sendBass(tabId, enabled) {
-  browser.tabs.sendMessage(tabId, { type: 'SET_BASS_BOOST', enabled }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: 'SET_BASS_BOOST', enabled }).catch(() => {});
 }
 
 function sendVoice(tabId, enabled) {
-  browser.tabs.sendMessage(tabId, { type: 'SET_VOICE_BOOST', enabled }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: 'SET_VOICE_BOOST', enabled }).catch(() => {});
 }
 
 function resetAudio(tabId, state) {
-  browser.tabs.sendMessage(tabId, { type: 'RESET_AUDIO', state }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: 'RESET_AUDIO', state }).catch(() => {});
 }
 
-function saveState(volume, bass, voice) {
-  browser.storage.local.get('rememberVolume', (d) => {
-    if (d.rememberVolume === true && currentHostname) {
-      browser.storage.local.set({ [`site_${currentHostname}`]: { volume, bass, voice } });
-    }
+async function saveState(volume, bass, voice) {
+  const data = await browser.storage.local.get('rememberVolume');
+  if (data.rememberVolume === true && currentHostname) {
+    await browser.storage.local.set({ [`site_${currentHostname}`]: { volume, bass, voice } });
+  }
+}
+
+async function applyAudioTabsVisibility() {
+  const data = await browser.storage.local.get('showAudioTabs');
+  const show = data.showAudioTabs !== false;
+  document.querySelector('.tabs-section').style.display = show ? '' : 'none';
+}
+
+function setControlsEnabled(enabled) {
+  controlsEnabled = enabled;
+  document.body.classList.toggle('disabled-ui', !enabled);
+  [slider, btnDefault, btnVoice, btnBass, btnReset].forEach((el) => {
+    el.disabled = !enabled;
   });
 }
 
-function loadState(cb) {
-  const key = `site_${currentHostname}`;
-  browser.storage.local.get(['rememberVolume', 'defaultVolume', key], (result) => {
-    const remember = result.rememberVolume === true;
-    const defaultVol = result.defaultVolume ?? 100;
-    const saved = result[key];
-    cb(remember && saved ? saved : { volume: defaultVol, bass: false, voice: false });
-  });
+function showBlockedBanner(message) {
+  blockedBanner.textContent = message;
+  blockedBanner.classList.add('show');
 }
 
-function applyAudioTabsVisibility() {
-  browser.storage.local.get('showAudioTabs', (d) => {
-    const show = d.showAudioTabs !== false;
-    document.querySelector('.tabs-section').style.display = show ? '' : 'none';
-  });
+function hideBlockedBanner() {
+  blockedBanner.classList.remove('show');
+}
+
+function showSiteAccess(label, description) {
+  if (siteAccessDismissed) return;
+  btnAllowSite.textContent = label;
+  siteAccessText.textContent = description;
+  siteAccessBox.classList.add('show');
+}
+
+function hideSiteAccess() {
+  siteAccessBox.classList.remove('show');
 }
 
 function applyVolume(val) {
@@ -93,11 +132,11 @@ function applyVolume(val) {
   volDisplay.textContent = `Volume: ${val}%`;
   updateSliderFill(val);
 
-  if (currentTabId !== null) {
-    sendVolume(currentTabId, val);
-    saveState(val, bassActive, voiceActive);
-    sendBadge(val);
-  }
+  if (!controlsEnabled || currentTabId === null) return;
+
+  sendVolume(currentTabId, val);
+  saveState(val, bassActive, voiceActive);
+  sendBadge(val);
 }
 
 function resetUiState(volume) {
@@ -108,7 +147,169 @@ function resetUiState(volume) {
   applyVolume(volume);
 }
 
+function initPopupState(state) {
+  voiceActive = state.voice || state.voiceBoost || false;
+  bassActive = state.bass || state.bassBoost || false;
+
+  slider.value = state.volume;
+  volDisplay.textContent = `Volume: ${state.volume}%`;
+  updateSliderFill(state.volume);
+  btnVoice.classList.toggle('active', voiceActive);
+  btnBass.classList.toggle('active', bassActive);
+  sendBadge(state.volume);
+}
+
+function isSiteBlocked() {
+  if (!currentHostname) return true;
+
+  if (currentMode === 'blacklist') {
+    return matchesList(blacklist, currentHostname);
+  }
+
+  return !matchesList(whitelist, currentHostname);
+}
+
+function currentSiteWhitelisted() {
+  return currentHostname ? matchesList(whitelist, currentHostname) : false;
+}
+
+async function hasPersistentSiteAccess() {
+  const patterns = getSitePatterns(currentHostname);
+  if (!patterns.length) return false;
+
+  try {
+    return await browser.permissions.contains({ origins: patterns });
+  } catch (e) {
+    return false;
+  }
+}
+
+async function getLiveState() {
+  if (currentTabId === null) return null;
+
+  try {
+    const liveState = await browser.tabs.sendMessage(currentTabId, { type: 'GET_STATE' });
+    if (liveState && typeof liveState.volume === 'number') {
+      return liveState;
+    }
+  } catch (e) {}
+
+  return null;
+}
+
+async function waitForLiveState() {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const state = await getLiveState();
+    if (state) return state;
+    await delay(100);
+  }
+
+  return null;
+}
+
+async function ensureInjectedForActiveTab() {
+  const existingState = await getLiveState();
+  if (existingState) return existingState;
+
+  if (currentTabId === null) return null;
+
+  try {
+    await browser.tabs.executeScript(currentTabId, {
+      file: 'content.js',
+      runAt: 'document_idle'
+    });
+  } catch (e) {
+    return null;
+  }
+
+  return waitForLiveState();
+}
+
+function isSupportedTabUrl(url) {
+  return /^(https?|file):/i.test(url);
+}
+
+async function refreshAccessUi() {
+  hideSiteAccess();
+
+  if (!currentHostname) return;
+  if (matchesList(blacklist, currentHostname)) return;
+
+  const whitelisted = currentSiteWhitelisted();
+  const hasAccess = await hasPersistentSiteAccess();
+
+  if (whitelisted && hasAccess) return;
+
+  if (whitelisted && !hasAccess) {
+    showSiteAccess('Grant site access', 'This site is whitelisted, but Firefox access has not been granted yet.');
+    return;
+  }
+
+  showSiteAccess('Always allow on this site', 'Allow Gain to auto-start on future visits to this site.');
+}
+
+async function initializeTabState() {
+  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+  if (!tabs.length) return;
+
+  currentTabId = tabs[0].id;
+  currentUrl = tabs[0].url || '';
+  try {
+    currentHostname = normalizeHostname(new URL(currentUrl).hostname);
+  } catch (e) {
+    currentHostname = '';
+  }
+
+  const settings = await browser.storage.local.get(['mode', 'blacklist', 'whitelist']);
+  currentMode = settings.mode || 'blacklist';
+  blacklist = settings.blacklist || [];
+  whitelist = settings.whitelist || [];
+  siteAccessDismissed = false;
+
+  try {
+    const dismissedUrl = await browser.runtime.sendMessage({
+      type: 'GET_DISMISSED_SITE_ACCESS_PROMPT',
+      tabId: currentTabId
+    });
+    siteAccessDismissed = dismissedUrl === currentUrl;
+  } catch (e) {}
+
+  if (!isSupportedTabUrl(currentUrl)) {
+    showBlockedBanner("Gain can't run on this page.");
+    setControlsEnabled(false);
+    initPopupState(DEFAULT_AUDIO_STATE);
+    return;
+  }
+
+  if (isSiteBlocked()) {
+    if (currentMode === 'whitelist' && !currentSiteWhitelisted()) {
+      showBlockedBanner('Gain is disabled on this site because it is not in your whitelist yet.');
+    } else {
+      showBlockedBanner('Gain is disabled on this site via your settings.');
+    }
+    setControlsEnabled(false);
+    initPopupState(DEFAULT_AUDIO_STATE);
+    await refreshAccessUi();
+    return;
+  }
+
+  hideBlockedBanner();
+
+  const liveState = await ensureInjectedForActiveTab();
+  if (liveState) {
+    initPopupState(liveState);
+    setControlsEnabled(true);
+  } else {
+    showBlockedBanner("Gain can't run on this page right now.");
+    setControlsEnabled(false);
+    initPopupState(DEFAULT_AUDIO_STATE);
+  }
+
+  await refreshAccessUi();
+}
+
 volDisplay.addEventListener('click', () => {
+  if (!controlsEnabled) return;
   volInput.value = parseInt(slider.value, 10);
   volDisplay.style.display = 'none';
   volInput.classList.add('visible');
@@ -117,6 +318,7 @@ volDisplay.addEventListener('click', () => {
 });
 
 function commitVolInput() {
+  if (!controlsEnabled) return;
   const val = Math.max(0, Math.min(600, parseInt(volInput.value, 10) || 0));
   volInput.classList.remove('visible');
   volDisplay.style.display = '';
@@ -132,49 +334,13 @@ volInput.addEventListener('keydown', (e) => {
 });
 volInput.addEventListener('blur', commitVolInput);
 
-browser.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-  if (!tabs.length) return;
-
-  currentTabId = tabs[0].id;
-  try {
-    currentHostname = new URL(tabs[0].url).hostname.replace(/^www\./, '');
-  } catch (e) {
-    currentHostname = '';
-  }
-
-  checkSiteBlocked(currentHostname);
-
-  browser.tabs.sendMessage(currentTabId, { type: 'GET_STATE' })
-    .then((liveState) => {
-      if (liveState && typeof liveState.volume === 'number') {
-        initPopupState(liveState);
-      } else {
-        loadState(initPopupState);
-      }
-    })
-    .catch(() => {
-      loadState(initPopupState);
-    });
-});
-
-function initPopupState(state) {
-  voiceActive = state.voice || state.voiceBoost || false;
-  bassActive = state.bass || state.bassBoost || false;
-
-  slider.value = state.volume;
-  volDisplay.textContent = `Volume: ${state.volume}%`;
-  updateSliderFill(state.volume);
-  btnVoice.classList.toggle('active', voiceActive);
-  btnBass.classList.toggle('active', bassActive);
-  sendBadge(state.volume);
-}
-
 slider.addEventListener('input', () => {
+  if (!controlsEnabled) return;
   applyVolume(parseInt(slider.value, 10));
 });
 
 document.addEventListener('keydown', (e) => {
-  if (document.activeElement === volInput) return;
+  if (!controlsEnabled || document.activeElement === volInput) return;
   const step = e.shiftKey ? 10 : 1;
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
     e.preventDefault();
@@ -185,35 +351,83 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-btnDefault.addEventListener('click', () => {
-  if (currentTabId !== null) {
-    resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
-  }
+btnDefault.addEventListener('click', async () => {
+  if (!controlsEnabled || currentTabId === null) return;
+  await resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
   resetUiState(100);
 });
 
-btnReset.addEventListener('click', () => {
-  if (currentTabId !== null) {
-    resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
-  }
+btnReset.addEventListener('click', async () => {
+  if (!controlsEnabled || currentTabId === null) return;
+  await resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
   resetUiState(100);
 });
 
-btnVoice.addEventListener('click', () => {
+btnVoice.addEventListener('click', async () => {
+  if (!controlsEnabled || currentTabId === null) return;
   voiceActive = !voiceActive;
   btnVoice.classList.toggle('active', voiceActive);
-  if (currentTabId !== null) {
-    sendVoice(currentTabId, voiceActive);
-    saveState(parseInt(slider.value, 10), bassActive, voiceActive);
+  await sendVoice(currentTabId, voiceActive);
+  await saveState(parseInt(slider.value, 10), bassActive, voiceActive);
+});
+
+btnBass.addEventListener('click', async () => {
+  if (!controlsEnabled || currentTabId === null) return;
+  bassActive = !bassActive;
+  btnBass.classList.toggle('active', bassActive);
+  await sendBass(currentTabId, bassActive);
+  await saveState(parseInt(slider.value, 10), bassActive, voiceActive);
+});
+
+btnAllowSite.addEventListener('click', async () => {
+  if (!currentHostname) return;
+
+  const patterns = getSitePatterns(currentHostname);
+  if (!patterns.length) return;
+
+  if (!currentSiteWhitelisted()) {
+    browser.runtime.sendMessage({
+      type: 'ADD_WHITELIST_SITE',
+      hostname: currentHostname
+    }).catch(() => {});
+    whitelist.unshift(currentHostname);
+  }
+
+  let granted = false;
+  try {
+    granted = await browser.permissions.request({ origins: patterns });
+  } catch (e) {
+    granted = false;
+  }
+
+  if (!granted) {
+    showBlockedBanner('Firefox did not grant access to this site.');
+    await refreshAccessUi();
+    return;
+  }
+
+  hideBlockedBanner();
+  hideSiteAccess();
+
+  const liveState = await ensureInjectedForActiveTab();
+  if (liveState) {
+    initPopupState(liveState);
+    setControlsEnabled(true);
+  } else {
+    showBlockedBanner('Site access was granted, but Gain could not start on this page yet.');
+    setControlsEnabled(false);
   }
 });
 
-btnBass.addEventListener('click', () => {
-  bassActive = !bassActive;
-  btnBass.classList.toggle('active', bassActive);
+btnDismissSiteAccess.addEventListener('click', () => {
+  siteAccessDismissed = true;
+  hideSiteAccess();
   if (currentTabId !== null) {
-    sendBass(currentTabId, bassActive);
-    saveState(parseInt(slider.value, 10), bassActive, voiceActive);
+    browser.runtime.sendMessage({
+      type: 'DISMISS_SITE_ACCESS_PROMPT',
+      tabId: currentTabId,
+      url: currentUrl
+    }).catch(() => {});
   }
 });
 
@@ -222,61 +436,57 @@ btnGear.addEventListener('click', () => {
   window.close();
 });
 
-function checkSiteBlocked(hostname) {
-  browser.storage.local.get(['mode', 'blacklist', 'whitelist'], (data) => {
-    const mode = data.mode || 'blacklist';
-    const blacklist = data.blacklist || [];
-    const whitelist = data.whitelist || [];
-    let blocked = false;
+async function loadAudioTabs() {
+  const tabs = await browser.tabs.query({ audible: true });
+  if (!tabs.length) {
+    tabsList.innerHTML = '<p class="no-tabs">No tabs playing audio.</p>';
+    return;
+  }
 
-    if (mode === 'blacklist') {
-      blocked = blacklist.some((d) => hostname === d || hostname.endsWith('.' + d));
+  tabsList.innerHTML = '';
+  tabs.forEach((tab) => {
+    const item = document.createElement('div');
+    item.className = 'tab-item' + (tab.id === currentTabId ? ' current' : '');
+
+    let favEl;
+    if (tab.favIconUrl) {
+      favEl = document.createElement('img');
+      favEl.className = 'tab-favicon';
+      favEl.src = tab.favIconUrl;
+      favEl.onerror = () => { favEl.style.display = 'none'; };
     } else {
-      blocked = whitelist.length > 0 && !whitelist.some((d) => hostname === d || hostname.endsWith('.' + d));
+      favEl = document.createElement('div');
+      favEl.className = 'tab-favicon-placeholder';
+      favEl.textContent = '🔊';
     }
 
-    if (blocked) blockedBanner.classList.add('show');
-  });
-}
+    const title = document.createElement('span');
+    title.className = 'tab-title';
+    title.textContent = tab.title || tab.url;
 
-function loadAudioTabs() {
-  browser.tabs.query({ audible: true }, (tabs) => {
-    if (!tabs.length) {
-      tabsList.innerHTML = '<p class="no-tabs">No tabs playing audio.</p>';
-      return;
-    }
-
-    tabsList.innerHTML = '';
-    tabs.forEach((tab) => {
-      const item = document.createElement('div');
-      item.className = 'tab-item' + (tab.id === currentTabId ? ' current' : '');
-
-      let favEl;
-      if (tab.favIconUrl) {
-        favEl = document.createElement('img');
-        favEl.className = 'tab-favicon';
-        favEl.src = tab.favIconUrl;
-        favEl.onerror = () => { favEl.style.display = 'none'; };
-      } else {
-        favEl = document.createElement('div');
-        favEl.className = 'tab-favicon-placeholder';
-        favEl.textContent = '🔊';
-      }
-
-      const title = document.createElement('span');
-      title.className = 'tab-title';
-      title.textContent = tab.title || tab.url;
-
-      item.appendChild(favEl);
-      item.appendChild(title);
-      item.addEventListener('click', () => {
-        browser.tabs.update(tab.id, { active: true });
-        window.close();
-      });
-      tabsList.appendChild(item);
+    item.appendChild(favEl);
+    item.appendChild(title);
+    item.addEventListener('click', () => {
+      browser.tabs.update(tab.id, { active: true });
+      window.close();
     });
+    tabsList.appendChild(item);
   });
 }
+
+browser.storage.local.get('darkMode').then((data) => {
+  if (data.darkMode) {
+    document.body.classList.add('dark');
+    document.getElementById('btnDark').textContent = '☀️';
+  }
+});
+
+document.getElementById('btnDark').addEventListener('click', () => {
+  const on = !document.body.classList.contains('dark');
+  document.body.classList.toggle('dark', on);
+  document.getElementById('btnDark').textContent = on ? '☀️' : '🌙';
+  browser.storage.local.set({ darkMode: on });
+});
 
 loadAudioTabs();
 applyAudioTabsVisibility();
@@ -287,6 +497,8 @@ btnDonate.addEventListener('click', () => {
   window.close();
 });
 
-browser.storage.local.get('showDonate', (d) => {
-  donateBar.style.display = d.showDonate === false ? 'none' : '';
+browser.storage.local.get('showDonate').then((data) => {
+  donateBar.style.display = data.showDonate === false ? 'none' : '';
 });
+
+initializeTabState();

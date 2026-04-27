@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Gain - Volume Booster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Boost volume up to 600% on any tab. Volume amplifier and booster with bass boost, voice boost, and per-site memory.",
   "icons": {
     "16": "icons/icon16.png",
@@ -28,24 +28,19 @@
     "storage",
     "activeTab"
   ],
+  "optional_permissions": [
+    "<all_urls>"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "gain-volume-booster@hookset",
-      "strict_min_version": "140.0",
-      "strict_min_version_android": "142.0",
+      "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": ["none"],
         "optional": []
       }
     }
   },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "background": {
     "scripts": ["background.js"],
     "persistent": false
