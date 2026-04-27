@@ -98,4 +98,4 @@ Gain is free, open source, and always will be. If it's useful to you, a small Bi
 
 ## License
 
-MIT - see [LICENSE](./LICENSE)
+GPL v3 - see [LICENSE](./LICENSE)
