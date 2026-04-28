@@ -13,7 +13,8 @@ function normalizeDomain(raw) {
   return raw.trim().toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
-    .replace(/\/.*$/, '');
+    .replace(/\/.*$/, '')
+    .replace(/:\d+$/, '');
 }
 
 function isIPv4Hostname(hostname) {

@@ -148,8 +148,8 @@ function resetUiState(volume) {
 }
 
 function initPopupState(state) {
-  voiceActive = state.voice || state.voiceBoost || false;
-  bassActive = state.bass || state.bassBoost || false;
+  voiceActive = state.voice || false;
+  bassActive = state.bass || false;
 
   slider.value = state.volume;
   volDisplay.textContent = `Volume: ${state.volume}%`;
@@ -245,6 +245,7 @@ async function refreshAccessUi() {
     return;
   }
 
+  if (currentMode !== 'whitelist') return;
   showSiteAccess('Always allow on this site', 'Allow Gain to auto-start on future visits to this site.');
 }
 
@@ -353,8 +354,10 @@ document.addEventListener('keydown', (e) => {
 
 btnDefault.addEventListener('click', async () => {
   if (!controlsEnabled || currentTabId === null) return;
-  await resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
-  resetUiState(100);
+  const data = await browser.storage.local.get('defaultVolume');
+  const vol = data.defaultVolume ?? 100;
+  await resetAudio(currentTabId, { volume: vol, bass: false, voice: false });
+  resetUiState(vol);
 });
 
 btnReset.addEventListener('click', async () => {

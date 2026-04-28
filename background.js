@@ -262,6 +262,7 @@ browser.tabs.onActivated.addListener(({ tabId }) => {
 });
 
 browser.runtime.onStartup.addListener(() => {
+  ignorePromiseError(() => browser.storage.local.remove('dismissedSiteAccessByTab'));
   ignorePromiseError(() => maybeInjectOpenTabs());
 });
 
