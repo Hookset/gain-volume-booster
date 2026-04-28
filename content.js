@@ -246,8 +246,8 @@
       if (msg.type === 'GET_STATE') {
         return Promise.resolve({
           volume: currentState.volume,
-          bassBoost: currentState.bass,
-          voiceBoost: currentState.voice
+          bass: currentState.bass,
+          voice: currentState.voice
         });
       }
     });
