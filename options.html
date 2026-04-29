@@ -321,6 +321,13 @@
 
     .setting-info strong { display: block; font-size: 13.5px; font-weight: 500; margin-bottom: 2px; }
     .setting-info span { font-size: 12px; color: var(--text-muted); }
+    .setting-info .setting-example {
+      display: block;
+      margin-top: 3px;
+      font-size: 11px;
+      color: var(--text-muted);
+      opacity: 0.72;
+    }
 
     .small-toggle-track {
       width: 36px;
@@ -368,15 +375,15 @@
       outline: none;
       cursor: pointer;
     }
-    .vol-setting input[type="range"]::-webkit-slider-thumb {
-      -webkit-appearance: none;
+    .vol-setting input[type="range"]::-moz-range-thumb {
       width: 15px; height: 15px;
+      border: none;
       border-radius: 50%;
       background: var(--blue);
       cursor: pointer;
       transition: transform 0.1s;
     }
-    .vol-setting input[type="range"]::-webkit-slider-thumb:hover {
+    .vol-setting input[type="range"]::-moz-range-thumb:hover {
       transform: scale(1.15);
     }
     .vol-val {
@@ -653,6 +660,17 @@
 
         <div class="setting-row">
           <div class="setting-info">
+            <strong>Reset volume on URL changes</strong>
+            <span>Reset volume and boosts when sites switch videos or streams</span>
+            <small class="setting-example">e.g., turn this off if you do not want to reset volume settings while listening to a playlist.</small>
+          </div>
+          <div class="small-toggle-track on" id="toggleResetOnUrlChange">
+            <div class="toggle-thumb"></div>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
             <strong>Remember volume per site</strong>
             <span>Restore your last volume setting when revisiting a site</span>
           </div>
@@ -692,7 +710,7 @@
     <div class="tab-panel" id="panel-about">
       <div class="about-logo">🔊</div>
       <div class="about-name">Gain</div>
-      <div class="about-ver">Version 1.0.1 · Firefox Extension</div>
+      <div class="about-ver">Version 1.0.2 · Firefox Extension</div>
 
       <div class="card">
         <div class="about-section">
@@ -719,6 +737,7 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="site-utils.js"></script>
 <script src="options.js"></script>
 </body>
 </html>

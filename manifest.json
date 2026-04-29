@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Gain - Volume Booster",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Boost volume up to 600% on any tab. Volume amplifier and booster with bass boost, voice boost, and per-site memory.",
   "icons": {
     "16": "icons/icon16.png",
@@ -42,7 +42,7 @@
     }
   },
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["site-utils.js", "background.js"],
     "persistent": false
   }
 }

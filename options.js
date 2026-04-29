@@ -9,29 +9,6 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2000);
 }
 
-function normalizeDomain(raw) {
-  return raw.trim().toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
-    .replace(/\/.*$/, '')
-    .replace(/:\d+$/, '');
-}
-
-function isIPv4Hostname(hostname) {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
-}
-
-function getSitePatterns(hostname) {
-  if (!hostname) return [];
-
-  const exact = `*://${hostname}/*`;
-  if (hostname === 'localhost' || hostname.includes(':') || isIPv4Hostname(hostname) || !hostname.includes('.')) {
-    return [exact];
-  }
-
-  return [exact, `*://*.${hostname}/*`];
-}
-
 async function requestSitePermission(hostname) {
   const patterns = getSitePatterns(hostname);
   if (!patterns.length) return false;
@@ -85,9 +62,12 @@ document.querySelectorAll('.nav-item').forEach(item => {
 // ── Domain list rendering ──────────────────────────────
 
 function renderList(listEl, domains, storageKey) {
-  listEl.innerHTML = '';
+  listEl.replaceChildren();
   if (!domains.length) {
-    listEl.innerHTML = '<div class="empty-state">No sites added yet.</div>';
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.textContent = 'No sites added yet.';
+    listEl.appendChild(emptyState);
     return;
   }
   domains.forEach((domain) => {
@@ -329,5 +309,6 @@ function initToggle(id, storageKey, defaultVal = true) {
 }
 
 initToggle('toggleAudioTabs', 'showAudioTabs', true);
+initToggle('toggleResetOnUrlChange', 'resetOnUrlChange', true);
 initToggle('toggleRemember', 'rememberVolume', false);
 initToggle('toggleDonate', 'showDonate', true);
