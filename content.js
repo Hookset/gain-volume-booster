@@ -2,8 +2,8 @@
 // Injected into pages to route media elements through a Web Audio pipeline.
 
 (function () {
-  if (window.__gainInjected) return;
-  window.__gainInjected = true;
+  if (window.__gainInjected || window.__gainInjecting) return;
+  window.__gainInjecting = true;
 
   const AUDIO = {
     BASS_FREQ_HZ: 200,
@@ -11,11 +11,11 @@
     VOICE_FREQ_HZ: 2500,
     VOICE_GAIN_DB: 12,
     VOICE_Q: 1,
-    COMP_THRESHOLD_DB: -24,
-    COMP_KNEE_DB: 30,
-    COMP_RATIO: 12,
+    COMP_THRESHOLD_DB: -6,
+    COMP_KNEE_DB: 18,
+    COMP_RATIO: 4,
     COMP_ATTACK_S: 0.003,
-    COMP_RELEASE_S: 0.25
+    COMP_RELEASE_S: 0.18
   };
 
   const hostname = location.hostname.replace(/^www\./, '');
@@ -36,7 +36,10 @@
         blocked = !matchesList(whitelist);
       }
 
-      if (blocked) return;
+      if (blocked) {
+        window.__gainInjecting = false;
+        return;
+      }
 
       const remember = data.rememberVolume === true;
       const siteState = data[`site_${hostname}`];
@@ -45,6 +48,8 @@
         ? siteState
         : { volume: defaultVol, bass: false, voice: false };
 
+      window.__gainInjected = true;
+      window.__gainInjecting = false;
       initAudio(startState);
     }
   );
@@ -53,6 +58,7 @@
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const mediaSourceMap = new WeakMap();
 
+    let lastUrl = location.href;
     let gainNode;
     let compressor;
     let bassFilter;
@@ -82,6 +88,43 @@
         bass: 'bass' in nextState ? !!nextState.bass : currentState.bass,
         voice: 'voice' in nextState ? !!nextState.voice : currentState.voice
       };
+    }
+
+    function sendBadge(volume) {
+      browser.runtime.sendMessage({ type: 'SET_BADGE', volume }).catch(() => {});
+    }
+
+    async function getDefaultReset() {
+      try {
+        const data = await browser.storage.local.get(['defaultVolume', 'rememberVolume', 'resetOnUrlChange']);
+        const volume = typeof data.defaultVolume === 'number' && isFinite(data.defaultVolume)
+          ? data.defaultVolume
+          : 100;
+        return {
+          enabled: data.resetOnUrlChange !== false,
+          remember: data.rememberVolume === true,
+          state: { volume, bass: false, voice: false }
+        };
+      } catch (e) {
+        return {
+          enabled: true,
+          remember: false,
+          state: { volume: 100, bass: false, voice: false }
+        };
+      }
+    }
+
+    async function resetForUrlChange() {
+      const reset = await getDefaultReset();
+      if (!reset.enabled) return;
+
+      rebuildAudio(reset.state);
+
+      if (reset.remember) {
+        await browser.storage.local.set({ [`site_${hostname}`]: reset.state });
+      }
+
+      sendBadge(reset.state.volume);
     }
 
     function applyState() {
@@ -219,6 +262,12 @@
     if (document.body) {
       observer.observe(document.body, { childList: true, subtree: true });
     }
+
+    setInterval(() => {
+      if (location.href === lastUrl) return;
+      lastUrl = location.href;
+      resetForUrlChange().catch(() => {});
+    }, 500);
 
     document.addEventListener('click', () => {
       if (audioCtx.state === 'suspended') audioCtx.resume();

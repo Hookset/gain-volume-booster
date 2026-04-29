@@ -27,32 +27,23 @@ let controlsEnabled = false;
 let siteAccessDismissed = false;
 const DEFAULT_AUDIO_STATE = { volume: 100, bass: false, voice: false };
 
-function normalizeHostname(hostname) {
-  return (hostname || '').replace(/^www\./, '');
-}
-
-function isIPv4Hostname(hostname) {
-  return /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
-}
-
-function getSitePatterns(hostname) {
-  const normalized = normalizeHostname(hostname);
-  if (!normalized) return [];
-
-  const exact = `*://${normalized}/*`;
-  if (normalized === 'localhost' || normalized.includes(':') || isIPv4Hostname(normalized) || !normalized.includes('.')) {
-    return [exact];
-  }
-
-  return [exact, `*://*.${normalized}/*`];
-}
-
-function matchesList(list, hostname) {
-  return list.some((domain) => hostname === domain || hostname.endsWith('.' + domain));
-}
-
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getSafeFaviconUrl(url) {
+  if (!url) return '';
+
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol === 'http:' || parsedUrl.protocol === 'https:') return url;
+  } catch (e) {}
+
+  if (/^data:image\/(?:png|gif|jpe?g|webp|x-icon|vnd\.microsoft\.icon);/i.test(url)) {
+    return url;
+  }
+
+  return '';
 }
 
 function updateSliderFill(val) {
@@ -255,11 +246,7 @@ async function initializeTabState() {
 
   currentTabId = tabs[0].id;
   currentUrl = tabs[0].url || '';
-  try {
-    currentHostname = normalizeHostname(new URL(currentUrl).hostname);
-  } catch (e) {
-    currentHostname = '';
-  }
+  currentHostname = getHostnameFromUrl(currentUrl);
 
   const settings = await browser.storage.local.get(['mode', 'blacklist', 'whitelist']);
   currentMode = settings.mode || 'blacklist';
@@ -360,10 +347,9 @@ btnDefault.addEventListener('click', async () => {
   resetUiState(vol);
 });
 
-btnReset.addEventListener('click', async () => {
+btnReset.addEventListener('click', () => {
   if (!controlsEnabled || currentTabId === null) return;
-  await resetAudio(currentTabId, { volume: 100, bass: false, voice: false });
-  resetUiState(100);
+  applyVolume(100);
 });
 
 btnVoice.addEventListener('click', async () => {
@@ -440,22 +426,31 @@ btnGear.addEventListener('click', () => {
 });
 
 async function loadAudioTabs() {
-  const tabs = await browser.tabs.query({ audible: true });
+  const [tabs, activeTabs] = await Promise.all([
+    browser.tabs.query({ audible: true }),
+    browser.tabs.query({ active: true, currentWindow: true })
+  ]);
+  const activeTabId = activeTabs.length ? activeTabs[0].id : currentTabId;
+
   if (!tabs.length) {
-    tabsList.innerHTML = '<p class="no-tabs">No tabs playing audio.</p>';
+    const noTabs = document.createElement('p');
+    noTabs.className = 'no-tabs';
+    noTabs.textContent = 'No tabs playing audio.';
+    tabsList.replaceChildren(noTabs);
     return;
   }
 
-  tabsList.innerHTML = '';
+  tabsList.replaceChildren();
   tabs.forEach((tab) => {
     const item = document.createElement('div');
-    item.className = 'tab-item' + (tab.id === currentTabId ? ' current' : '');
+    item.className = 'tab-item' + (tab.id === activeTabId ? ' current' : '');
 
     let favEl;
-    if (tab.favIconUrl) {
+    const faviconUrl = getSafeFaviconUrl(tab.favIconUrl);
+    if (faviconUrl) {
       favEl = document.createElement('img');
       favEl.className = 'tab-favicon';
-      favEl.src = tab.favIconUrl;
+      favEl.src = faviconUrl;
       favEl.onerror = () => { favEl.style.display = 'none'; };
     } else {
       favEl = document.createElement('div');
