@@ -7,13 +7,32 @@ const DEFAULT_AUDIO_STATE = {
   voice: false
 };
 
+function isExpectedTabError(e) {
+  const msg = (e && e.message) || '';
+  return (
+    msg.includes('Could not establish connection') ||
+    msg.includes('Receiving end does not exist') ||
+    msg.includes('No tab with id') ||
+    msg.includes('Invalid tab ID') ||
+    msg.includes('Tab was closed')
+  );
+}
+
 function ignorePromiseError(operation) {
   try {
     const pending = operation();
     if (pending && typeof pending.catch === 'function') {
-      pending.catch(() => {});
+      pending.catch((e) => {
+        if (!isExpectedTabError(e)) {
+          console.warn('[Gain] Background error:', (e && e.message) || e);
+        }
+      });
     }
-  } catch (e) {}
+  } catch (e) {
+    if (!isExpectedTabError(e)) {
+      console.warn('[Gain] Background error:', (e && e.message) || e);
+    }
+  }
 }
 
 function setBadgeText(details) {
@@ -28,30 +47,21 @@ function clearBadge(tabId) {
   setBadgeText({ text: '', tabId });
 }
 
-function isSupportedTabUrl(url) {
-  return /^(https?|file):/i.test(url || '');
+
+function getAddedDomains(oldList = [], newList = []) {
+  const oldSet = new Set(oldList);
+  return newList.filter((d) => !oldSet.has(d));
 }
 
-function getChangedDomains(previous = [], next = []) {
-  const oldSet = new Set(previous);
-  const newSet = new Set(next);
-  const changed = new Set();
-
-  oldSet.forEach((domain) => {
-    if (!newSet.has(domain)) changed.add(domain);
-  });
-
-  newSet.forEach((domain) => {
-    if (!oldSet.has(domain)) changed.add(domain);
-  });
-
-  return Array.from(changed);
+function getRemovedDomains(oldList = [], newList = []) {
+  const newSet = new Set(newList);
+  return oldList.filter((d) => !newSet.has(d));
 }
 
 async function resetTabAudio(tabId) {
   try {
     await browser.tabs.sendMessage(tabId, {
-      type: 'RESET_AUDIO',
+      type: MSG.RESET_AUDIO,
       state: DEFAULT_AUDIO_STATE
     });
   } catch (e) {}
@@ -125,23 +135,11 @@ function shouldAutoInject(settings, hostname) {
   return matchesList(whitelist, hostname) && !shouldBlockSite(settings, hostname);
 }
 
-async function hasPersistentSiteAccess(hostname) {
-  const patterns = getSitePatterns(hostname);
-  if (!patterns.length) return false;
-
-  try {
-    return await browser.permissions.contains({ origins: patterns });
-  } catch (e) {
-    return false;
-  }
-}
 
 async function injectContentScript(tabId) {
   try {
-    await browser.tabs.executeScript(tabId, {
-      file: 'content.js',
-      runAt: 'document_idle'
-    });
+    await browser.tabs.executeScript(tabId, { file: 'site-utils.js', runAt: 'document_idle' });
+    await browser.tabs.executeScript(tabId, { file: 'content.js', runAt: 'document_idle' });
   } catch (e) {}
 }
 
@@ -172,19 +170,21 @@ async function maybeInjectOpenTabs() {
 }
 
 browser.runtime.onMessage.addListener((msg, sender) => {
-  if (msg.type === 'ADD_WHITELIST_SITE') {
+  if (sender.id !== browser.runtime.id) return;
+
+  if (msg.type === MSG.ADD_WHITELIST_SITE) {
     return addWhitelistedSite(normalizeHostname(msg.hostname));
   }
 
-  if (msg.type === 'DISMISS_SITE_ACCESS_PROMPT') {
+  if (msg.type === MSG.DISMISS_SITE_ACCESS_PROMPT) {
     return setDismissedPrompt(msg.tabId, msg.url || '');
   }
 
-  if (msg.type === 'GET_DISMISSED_SITE_ACCESS_PROMPT') {
+  if (msg.type === MSG.GET_DISMISSED_SITE_ACCESS_PROMPT) {
     return getDismissedPromptUrl(msg.tabId);
   }
 
-  if (msg.type !== 'SET_BADGE') return;
+  if (msg.type !== MSG.SET_BADGE) return;
 
   const tabId = msg.tabId ?? (sender.tab && sender.tab.id);
   const { volume } = msg;
@@ -219,10 +219,8 @@ browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 
 browser.tabs.onActivated.addListener(({ tabId }) => {
   ignorePromiseError(async () => {
-    try {
-      const tab = await browser.tabs.get(tabId);
-      await maybeInjectForTab(tabId, tab.url);
-    } catch (e) {}
+    const tab = await browser.tabs.get(tabId);
+    await maybeInjectForTab(tabId, tab.url);
   });
 });
 
@@ -248,27 +246,55 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (!modeChanged && !blacklistChanged && !whitelistChanged) return;
 
   if (modeChanged) {
-    ignorePromiseError(() => resetTabsMatching((tab) => isSupportedTabUrl(tab.url)));
+    ignorePromiseError(async () => {
+      const newMode = changes.mode.newValue || 'blacklist';
+      const data = await browser.storage.local.get(['whitelist', 'blacklist']);
+      const wl = data.whitelist || [];
+      const bl = data.blacklist || [];
+
+      await resetTabsMatching((tab) => {
+        if (!isSupportedTabUrl(tab.url)) return false;
+        const hostname = getHostnameFromUrl(tab.url);
+        if (!hostname) return false;
+
+        if (newMode === 'whitelist') {
+          // Switching to whitelist: reset tabs not in whitelist (now newly blocked).
+          // Skip already-blacklisted tabs — nothing was running there in blacklist mode.
+          if (matchesList(bl, hostname)) return false;
+          return !matchesList(wl, hostname);
+        }
+
+        // Switching to blacklist: reset tabs that are in the blacklist.
+        // They may have been running because they were whitelisted in whitelist mode.
+        return matchesList(bl, hostname);
+      });
+    });
     return;
   }
 
-  const changedDomains = [
-    ...getChangedDomains(
-      blacklistChanged ? changes.blacklist.oldValue || [] : [],
-      blacklistChanged ? changes.blacklist.newValue || [] : []
-    ),
-    ...getChangedDomains(
-      whitelistChanged ? changes.whitelist.oldValue || [] : [],
-      whitelistChanged ? changes.whitelist.newValue || [] : []
-    )
-  ];
+  ignorePromiseError(async () => {
+    const { mode } = await browser.storage.local.get('mode');
+    const currentMode = mode || 'blacklist';
 
-  if (!changedDomains.length) return;
+    const domainsToReset = [
+      // Newly blacklisted — only relevant in blacklist mode (blacklist is ignored in whitelist mode)
+      ...(blacklistChanged && currentMode === 'blacklist' ? getAddedDomains(
+        changes.blacklist.oldValue || [],
+        changes.blacklist.newValue || []
+      ) : []),
+      // Removed from whitelist — only newly blocked in whitelist mode
+      ...(whitelistChanged && currentMode === 'whitelist' ? getRemovedDomains(
+        changes.whitelist.oldValue || [],
+        changes.whitelist.newValue || []
+      ) : []),
+    ];
 
-  ignorePromiseError(() => resetTabsMatching((tab) => {
-    if (!isSupportedTabUrl(tab.url)) return false;
+    if (!domainsToReset.length) return;
 
-    const hostname = getHostnameFromUrl(tab.url);
-    return changedDomains.some((domain) => hostname === domain || hostname.endsWith('.' + domain));
-  }));
+    await resetTabsMatching((tab) => {
+      if (!isSupportedTabUrl(tab.url)) return false;
+      const hostname = getHostnameFromUrl(tab.url);
+      return domainsToReset.some((domain) => hostname === domain || hostname.endsWith('.' + domain));
+    });
+  });
 });

@@ -1,0 +1,25 @@
+{
+  "name": "gain-volume-booster",
+  "version": "1.0.2",
+  "description": "A Firefox extension that boosts audio volume up to **600%** on supported tabs. Clean popup UI, per-site memory, EQ filters, and zero data collection.",
+  "main": "background.js",
+  "scripts": {
+    "check": "eslint background.js content.js popup.js options.js site-utils.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Hookset/gain-volume-booster.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "GPL-3.0-only",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Hookset/gain-volume-booster/issues"
+  },
+  "homepage": "https://github.com/Hookset/gain-volume-booster#readme",
+  "devDependencies": {
+    "eslint": "^10.2.1"
+  }
+}
