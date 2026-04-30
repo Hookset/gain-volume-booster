@@ -2,7 +2,7 @@
 
 A Firefox extension that boosts audio volume up to **600%** on supported tabs. Clean popup UI, per-site memory, EQ filters, and zero data collection.
 
-> Available on the [Firefox Add-ons store](https://addons.mozilla.org/en-US/firefox/) · GPL v3 License
+> Currently pending approval - available soon on the [Firefox Add-ons store](https://addons.mozilla.org/en-US/firefox/) · GPL v3 License
 
 ---
 
