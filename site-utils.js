@@ -39,3 +39,30 @@ function getHostnameFromUrl(url) {
     return '';
   }
 }
+
+function isSupportedTabUrl(url) {
+  return /^(https?|file):/i.test(url || '');
+}
+
+async function hasPersistentSiteAccess(hostname) {
+  const patterns = getSitePatterns(hostname);
+  if (!patterns.length) return false;
+
+  try {
+    return await browser.permissions.contains({ origins: patterns });
+  } catch (e) {
+    return false;
+  }
+}
+
+const MSG = {
+  SET_VOLUME:                       'SET_VOLUME',
+  SET_BASS_BOOST:                   'SET_BASS_BOOST',
+  SET_VOICE_BOOST:                  'SET_VOICE_BOOST',
+  RESET_AUDIO:                      'RESET_AUDIO',
+  GET_STATE:                        'GET_STATE',
+  SET_BADGE:                        'SET_BADGE',
+  ADD_WHITELIST_SITE:               'ADD_WHITELIST_SITE',
+  DISMISS_SITE_ACCESS_PROMPT:       'DISMISS_SITE_ACCESS_PROMPT',
+  GET_DISMISSED_SITE_ACCESS_PROMPT: 'GET_DISMISSED_SITE_ACCESS_PROMPT',
+};

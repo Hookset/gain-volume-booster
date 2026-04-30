@@ -241,7 +241,7 @@ browser.storage.local.get('defaultVolume', (d) => {
 });
 
 defaultVolSlider.addEventListener('input', () => {
-  const v = parseInt(defaultVolSlider.value);
+  const v = parseInt(defaultVolSlider.value, 10);
   updateDefaultVolSlider(v);
   browser.storage.local.set({ defaultVolume: v });
 });
@@ -252,7 +252,7 @@ document.addEventListener('keydown', (e) => {
   const tag = document.activeElement.tagName;
   if (tag === 'INPUT' || tag === 'TEXTAREA') return;
   const step = e.shiftKey ? 10 : 1;
-  let v = parseInt(defaultVolSlider.value);
+  let v = parseInt(defaultVolSlider.value, 10);
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
     e.preventDefault();
     v = Math.min(600, v + step);
@@ -267,7 +267,7 @@ document.addEventListener('keydown', (e) => {
 
 // Click label → editable input
 defaultVolVal.addEventListener('click', () => {
-  defaultVolInput.value = parseInt(defaultVolSlider.value);
+  defaultVolInput.value = parseInt(defaultVolSlider.value, 10);
   defaultVolVal.style.display = 'none';
   defaultVolInput.classList.add('visible');
   defaultVolInput.focus();
@@ -275,7 +275,7 @@ defaultVolVal.addEventListener('click', () => {
 });
 
 function commitDefaultVolInput() {
-  const v = Math.max(0, Math.min(600, parseInt(defaultVolInput.value) || 0));
+  const v = Math.max(0, Math.min(600, parseInt(defaultVolInput.value, 10) || 0));
   defaultVolInput.classList.remove('visible');
   defaultVolVal.style.display = '';
   defaultVolSlider.value = v;

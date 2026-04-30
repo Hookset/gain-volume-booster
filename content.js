@@ -1,7 +1,7 @@
 // content.js
 // Injected into pages to route media elements through a Web Audio pipeline.
 
-(function () {
+(async function () {
   if (window.__gainInjected || window.__gainInjecting) return;
   window.__gainInjecting = true;
 
@@ -20,39 +20,42 @@
 
   const hostname = location.hostname.replace(/^www\./, '');
 
-  browser.storage.local.get(
-    ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', `site_${hostname}`],
-    (data) => {
-      const mode = data.mode || 'blacklist';
-      const blacklist = data.blacklist || [];
-      const whitelist = data.whitelist || [];
+  let data;
+  try {
+    data = await browser.storage.local.get(
+      ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', `site_${hostname}`]
+    );
+  } catch (e) {
+    window.__gainInjecting = false;
+    return;
+  }
 
-      const matchesList = (list) => list.some((d) => hostname === d || hostname.endsWith('.' + d));
+  const mode = data.mode || 'blacklist';
+  const blacklist = data.blacklist || [];
+  const whitelist = data.whitelist || [];
 
-      let blocked = false;
-      if (mode === 'blacklist') {
-        blocked = matchesList(blacklist);
-      } else {
-        blocked = !matchesList(whitelist);
-      }
+  let blocked = false;
+  if (mode === 'blacklist') {
+    blocked = matchesList(blacklist, hostname);
+  } else {
+    blocked = !matchesList(whitelist, hostname);
+  }
 
-      if (blocked) {
-        window.__gainInjecting = false;
-        return;
-      }
+  if (blocked) {
+    window.__gainInjecting = false;
+    return;
+  }
 
-      const remember = data.rememberVolume === true;
-      const siteState = data[`site_${hostname}`];
-      const defaultVol = data.defaultVolume ?? 100;
-      const startState = remember && siteState
-        ? siteState
-        : { volume: defaultVol, bass: false, voice: false };
+  const remember = data.rememberVolume === true;
+  const siteState = data[`site_${hostname}`];
+  const defaultVol = data.defaultVolume ?? 100;
+  const startState = remember && siteState
+    ? siteState
+    : { volume: defaultVol, bass: false, voice: false };
 
-      window.__gainInjected = true;
-      window.__gainInjecting = false;
-      initAudio(startState);
-    }
-  );
+  window.__gainInjected = true;
+  window.__gainInjecting = false;
+  initAudio(startState);
 
   function initAudio(startState) {
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -91,7 +94,7 @@
     }
 
     function sendBadge(volume) {
-      browser.runtime.sendMessage({ type: 'SET_BADGE', volume }).catch(() => {});
+      browser.runtime.sendMessage({ type: MSG.SET_BADGE, volume }).catch(() => {});
     }
 
     async function getDefaultReset() {
@@ -263,36 +266,47 @@
       observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    setInterval(() => {
+    window.addEventListener('pagehide', () => observer.disconnect(), { once: true });
+
+    function handleUrlChange() {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
       resetForUrlChange().catch(() => {});
-    }, 500);
+    }
+
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    setInterval(handleUrlChange, 1000);
 
     document.addEventListener('click', () => {
       if (audioCtx.state === 'suspended') audioCtx.resume();
     }, { once: true });
 
-    browser.runtime.onMessage.addListener((msg) => {
+    browser.runtime.onMessage.addListener((msg, sender) => {
+      if (sender.id !== browser.runtime.id) return;
       if (audioCtx.state === 'suspended') audioCtx.resume();
 
-      if (msg.type === 'SET_VOLUME') {
+      if (msg.type === MSG.SET_VOLUME) {
         setCurrentState({ volume: msg.value });
       }
 
-      if (msg.type === 'SET_BASS_BOOST') {
+      if (msg.type === MSG.SET_BASS_BOOST) {
         setCurrentState({ bass: msg.enabled });
       }
 
-      if (msg.type === 'SET_VOICE_BOOST') {
+      if (msg.type === MSG.SET_VOICE_BOOST) {
         setCurrentState({ voice: msg.enabled });
       }
 
-      if (msg.type === 'RESET_AUDIO') {
+      if (msg.type === MSG.RESET_AUDIO) {
+        observer.disconnect();
         rebuildAudio(msg.state || { volume: 100, bass: false, voice: false });
+        if (document.body) {
+          observer.observe(document.body, { childList: true, subtree: true });
+        }
       }
 
-      if (msg.type === 'GET_STATE') {
+      if (msg.type === MSG.GET_STATE) {
         return Promise.resolve({
           volume: currentState.volume,
           bass: currentState.bass,

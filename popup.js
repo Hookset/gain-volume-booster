@@ -57,23 +57,23 @@ function updateSliderFill(val) {
 
 function sendBadge(volume) {
   if (currentTabId === null) return;
-  browser.runtime.sendMessage({ type: 'SET_BADGE', tabId: currentTabId, volume }).catch(() => {});
+  browser.runtime.sendMessage({ type: MSG.SET_BADGE, tabId: currentTabId, volume }).catch(() => {});
 }
 
 function sendVolume(tabId, volume) {
-  return browser.tabs.sendMessage(tabId, { type: 'SET_VOLUME', value: volume }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: MSG.SET_VOLUME, value: volume }).catch(() => {});
 }
 
 function sendBass(tabId, enabled) {
-  return browser.tabs.sendMessage(tabId, { type: 'SET_BASS_BOOST', enabled }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: MSG.SET_BASS_BOOST, enabled }).catch(() => {});
 }
 
 function sendVoice(tabId, enabled) {
-  return browser.tabs.sendMessage(tabId, { type: 'SET_VOICE_BOOST', enabled }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: MSG.SET_VOICE_BOOST, enabled }).catch(() => {});
 }
 
 function resetAudio(tabId, state) {
-  return browser.tabs.sendMessage(tabId, { type: 'RESET_AUDIO', state }).catch(() => {});
+  return browser.tabs.sendMessage(tabId, { type: MSG.RESET_AUDIO, state }).catch(() => {});
 }
 
 async function saveState(volume, bass, voice) {
@@ -164,22 +164,12 @@ function currentSiteWhitelisted() {
   return currentHostname ? matchesList(whitelist, currentHostname) : false;
 }
 
-async function hasPersistentSiteAccess() {
-  const patterns = getSitePatterns(currentHostname);
-  if (!patterns.length) return false;
-
-  try {
-    return await browser.permissions.contains({ origins: patterns });
-  } catch (e) {
-    return false;
-  }
-}
 
 async function getLiveState() {
   if (currentTabId === null) return null;
 
   try {
-    const liveState = await browser.tabs.sendMessage(currentTabId, { type: 'GET_STATE' });
+    const liveState = await browser.tabs.sendMessage(currentTabId, { type: MSG.GET_STATE });
     if (liveState && typeof liveState.volume === 'number') {
       return liveState;
     }
@@ -205,10 +195,8 @@ async function ensureInjectedForActiveTab() {
   if (currentTabId === null) return null;
 
   try {
-    await browser.tabs.executeScript(currentTabId, {
-      file: 'content.js',
-      runAt: 'document_idle'
-    });
+    await browser.tabs.executeScript(currentTabId, { file: 'site-utils.js', runAt: 'document_idle' });
+    await browser.tabs.executeScript(currentTabId, { file: 'content.js', runAt: 'document_idle' });
   } catch (e) {
     return null;
   }
@@ -216,9 +204,6 @@ async function ensureInjectedForActiveTab() {
   return waitForLiveState();
 }
 
-function isSupportedTabUrl(url) {
-  return /^(https?|file):/i.test(url);
-}
 
 async function refreshAccessUi() {
   hideSiteAccess();
@@ -227,7 +212,7 @@ async function refreshAccessUi() {
   if (matchesList(blacklist, currentHostname)) return;
 
   const whitelisted = currentSiteWhitelisted();
-  const hasAccess = await hasPersistentSiteAccess();
+  const hasAccess = await hasPersistentSiteAccess(currentHostname);
 
   if (whitelisted && hasAccess) return;
 
@@ -256,7 +241,7 @@ async function initializeTabState() {
 
   try {
     const dismissedUrl = await browser.runtime.sendMessage({
-      type: 'GET_DISMISSED_SITE_ACCESS_PROMPT',
+      type: MSG.GET_DISMISSED_SITE_ACCESS_PROMPT,
       tabId: currentTabId
     });
     siteAccessDismissed = dismissedUrl === currentUrl;
@@ -374,14 +359,6 @@ btnAllowSite.addEventListener('click', async () => {
   const patterns = getSitePatterns(currentHostname);
   if (!patterns.length) return;
 
-  if (!currentSiteWhitelisted()) {
-    browser.runtime.sendMessage({
-      type: 'ADD_WHITELIST_SITE',
-      hostname: currentHostname
-    }).catch(() => {});
-    whitelist.unshift(currentHostname);
-  }
-
   let granted = false;
   try {
     granted = await browser.permissions.request({ origins: patterns });
@@ -393,6 +370,14 @@ btnAllowSite.addEventListener('click', async () => {
     showBlockedBanner('Firefox did not grant access to this site.');
     await refreshAccessUi();
     return;
+  }
+
+  if (!currentSiteWhitelisted()) {
+    browser.runtime.sendMessage({
+      type: MSG.ADD_WHITELIST_SITE,
+      hostname: currentHostname
+    }).catch(() => {});
+    whitelist.unshift(currentHostname);
   }
 
   hideBlockedBanner();
@@ -413,7 +398,7 @@ btnDismissSiteAccess.addEventListener('click', () => {
   hideSiteAccess();
   if (currentTabId !== null) {
     browser.runtime.sendMessage({
-      type: 'DISMISS_SITE_ACCESS_PROMPT',
+      type: MSG.DISMISS_SITE_ACCESS_PROMPT,
       tabId: currentTabId,
       url: currentUrl
     }).catch(() => {});
@@ -486,8 +471,8 @@ document.getElementById('btnDark').addEventListener('click', () => {
   browser.storage.local.set({ darkMode: on });
 });
 
-loadAudioTabs();
-applyAudioTabsVisibility();
+loadAudioTabs().catch(() => {});
+applyAudioTabsVisibility().catch(() => {});
 setInterval(loadAudioTabs, 2000);
 
 btnDonate.addEventListener('click', () => {
@@ -499,4 +484,4 @@ browser.storage.local.get('showDonate').then((data) => {
   donateBar.style.display = data.showDonate === false ? 'none' : '';
 });
 
-initializeTabState();
+initializeTabState().catch(() => {});
