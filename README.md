@@ -2,7 +2,7 @@
 
 A Firefox extension that boosts audio volume up to **600%** on supported tabs. Clean popup UI, per-site memory, EQ filters, and zero data collection.
 
-> Currently pending approval - available soon on the [Firefox Add-ons store](https://addons.mozilla.org/en-US/firefox/) · GPL v3 License
+> Available on the [Firefox Add-ons store](https://addons.mozilla.org/en-US/firefox/addon/gain-volume-booster/) · GPL v3 License
 
 ---
 
@@ -30,7 +30,7 @@ A Firefox extension that boosts audio volume up to **600%** on supported tabs. C
 ## Installation
 
 ### From the Firefox Add-ons store
-Search for **Gain - Volume Booster** on [addons.mozilla.org](https://addons.mozilla.org).
+Search for **Gain - Volume Booster** on [addons.mozilla.org](https://addons.mozilla.org/en-US/firefox/addon/gain-volume-booster/) (or click the link).
 
 ### Load locally (for development)
 1. Clone or download this repo
