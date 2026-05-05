@@ -5,11 +5,12 @@ const btnDefault = document.getElementById('btnDefault');
 const btnVoice = document.getElementById('btnVoice');
 const btnBass = document.getElementById('btnBass');
 const btnReset = document.getElementById('btnReset');
+const btnMergedDefault = document.getElementById('btnMergedDefault');
+const btnMergedReset = document.getElementById('btnMergedReset');
 const btnGear = document.getElementById('btnGear');
 const tabsList = document.getElementById('tabsList');
 const blockedBanner = document.getElementById('blockedBanner');
 const btnDonate = document.getElementById('btnDonate');
-const donateBar = document.getElementById('donateBar');
 const siteAccessBox = document.getElementById('siteAccessBox');
 const siteAccessText = document.getElementById('siteAccessText');
 const btnAllowSite = document.getElementById('btnAllowSite');
@@ -89,10 +90,18 @@ async function applyAudioTabsVisibility() {
   document.querySelector('.tabs-section').style.display = show ? '' : 'none';
 }
 
+async function applyBoostButtonsVisibility() {
+  const data = await browser.storage.local.get('showBoostButtons');
+  const show = data.showBoostButtons !== false;
+  document.getElementById('boostRow').style.display = show ? '' : 'none';
+  document.getElementById('resetRow').style.display = show ? '' : 'none';
+  document.getElementById('mergedRow').style.display = show ? 'none' : 'flex';
+}
+
 function setControlsEnabled(enabled) {
   controlsEnabled = enabled;
   document.body.classList.toggle('disabled-ui', !enabled);
-  [slider, btnDefault, btnVoice, btnBass, btnReset].forEach((el) => {
+  [slider, btnDefault, btnVoice, btnBass, btnReset, btnMergedDefault, btnMergedReset].forEach((el) => {
     el.disabled = !enabled;
   });
 }
@@ -126,7 +135,7 @@ function applyVolume(val) {
   if (!controlsEnabled || currentTabId === null) return;
 
   sendVolume(currentTabId, val);
-  saveState(val, bassActive, voiceActive);
+  saveState(val, bassActive, voiceActive).catch(() => {});
   sendBadge(val);
 }
 
@@ -222,7 +231,7 @@ async function refreshAccessUi() {
   }
 
   if (currentMode !== 'whitelist') return;
-  showSiteAccess('Always allow on this site', 'Allow Gain to auto-start on future visits to this site.');
+  showSiteAccess('Add to Whitelist', 'Allow Gain to auto-start on future visits to this site.');
 }
 
 async function initializeTabState() {
@@ -272,6 +281,15 @@ async function initializeTabState() {
   if (liveState) {
     initPopupState(liveState);
     setControlsEnabled(true);
+
+    const boostData = await browser.storage.local.get('showBoostButtons');
+    if (boostData.showBoostButtons === false && (voiceActive || bassActive)) {
+      voiceActive = false;
+      bassActive = false;
+      sendVoice(currentTabId, false);
+      sendBass(currentTabId, false);
+      saveState(parseInt(slider.value, 10), false, false).catch(() => {});
+    }
   } else {
     showBlockedBanner("Gain can't run on this page right now.");
     setControlsEnabled(false);
@@ -324,18 +342,23 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-btnDefault.addEventListener('click', async () => {
+async function handleDefault() {
   if (!controlsEnabled || currentTabId === null) return;
   const data = await browser.storage.local.get('defaultVolume');
   const vol = data.defaultVolume ?? 100;
   await resetAudio(currentTabId, { volume: vol, bass: false, voice: false });
   resetUiState(vol);
-});
+}
 
-btnReset.addEventListener('click', () => {
+function handleReset() {
   if (!controlsEnabled || currentTabId === null) return;
   applyVolume(100);
-});
+}
+
+btnDefault.addEventListener('click', handleDefault);
+btnMergedDefault.addEventListener('click', handleDefault);
+btnReset.addEventListener('click', handleReset);
+btnMergedReset.addEventListener('click', handleReset);
 
 btnVoice.addEventListener('click', async () => {
   if (!controlsEnabled || currentTabId === null) return;
@@ -373,10 +396,16 @@ btnAllowSite.addEventListener('click', async () => {
   }
 
   if (!currentSiteWhitelisted()) {
-    browser.runtime.sendMessage({
-      type: MSG.ADD_WHITELIST_SITE,
-      hostname: currentHostname
-    }).catch(() => {});
+    try {
+      await browser.runtime.sendMessage({
+        type: MSG.ADD_WHITELIST_SITE,
+        hostname: currentHostname
+      });
+    } catch (e) {
+      showBlockedBanner('Site access was granted, but Gain could not save this site yet.');
+      await refreshAccessUi();
+      return;
+    }
     whitelist.unshift(currentHostname);
   }
 
@@ -462,17 +491,24 @@ browser.storage.local.get('darkMode').then((data) => {
     document.body.classList.add('dark');
     document.getElementById('btnDark').textContent = '☀️';
   }
+  try {
+    localStorage.setItem('gain.darkMode', data.darkMode ? 'true' : 'false');
+  } catch (e) {}
 });
 
 document.getElementById('btnDark').addEventListener('click', () => {
   const on = !document.body.classList.contains('dark');
   document.body.classList.toggle('dark', on);
   document.getElementById('btnDark').textContent = on ? '☀️' : '🌙';
+  try {
+    localStorage.setItem('gain.darkMode', on ? 'true' : 'false');
+  } catch (e) {}
   browser.storage.local.set({ darkMode: on });
 });
 
 loadAudioTabs().catch(() => {});
 applyAudioTabsVisibility().catch(() => {});
+applyBoostButtonsVisibility().catch(() => {});
 setInterval(loadAudioTabs, 2000);
 
 btnDonate.addEventListener('click', () => {
@@ -481,7 +517,7 @@ btnDonate.addEventListener('click', () => {
 });
 
 browser.storage.local.get('showDonate').then((data) => {
-  donateBar.style.display = data.showDonate === false ? 'none' : '';
+  btnDonate.style.display = data.showDonate === false ? 'none' : 'flex';
 });
 
 initializeTabState().catch(() => {});

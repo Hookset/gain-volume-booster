@@ -36,8 +36,13 @@ async function removeSitePermission(hostname) {
 const darkTrack = document.getElementById('darkTrack');
 
 function applyDark(on) {
+  document.documentElement.classList.toggle('dark', on);
+  document.documentElement.classList.remove('theme-loading');
   document.body.classList.toggle('dark', on);
   darkTrack.classList.toggle('on', on);
+  try {
+    localStorage.setItem('gain.darkMode', on ? 'true' : 'false');
+  } catch (e) {}
 }
 
 browser.storage.local.get('darkMode', (d) => applyDark(!!d.darkMode));
@@ -89,7 +94,6 @@ function renderList(listEl, domains, storageKey) {
         await removeSitePermission(domain);
       }
       browser.storage.local.set({ [storageKey]: domains });
-      renderList(listEl, domains, storageKey);
       showToast('Site removed');
     });
     item.appendChild(name);
@@ -109,13 +113,12 @@ browser.storage.local.get('blacklist', (d) => {
   renderList(blacklistList, blacklist, 'blacklist');
 });
 
-function addBlacklist() {
+async function addBlacklist() {
   const domain = normalizeDomain(blacklistInput.value);
   if (!domain) return;
   if (blacklist.includes(domain)) { showToast('Already in list'); return; }
   blacklist.unshift(domain);
-  browser.storage.local.set({ blacklist });
-  renderList(blacklistList, blacklist, 'blacklist');
+  await browser.storage.local.set({ blacklist });
   blacklistInput.value = '';
   showToast('Site blacklisted ✓');
 }
@@ -152,6 +155,10 @@ browser.storage.onChanged.addListener((changes, area) => {
     modeBlacklist.classList.toggle('selected', mode === 'blacklist');
     modeWhitelist.classList.toggle('selected', mode === 'whitelist');
   }
+
+  if (changes.darkMode) {
+    applyDark(!!changes.darkMode.newValue);
+  }
 });
 
 async function addWhitelist() {
@@ -166,8 +173,7 @@ async function addWhitelist() {
   }
 
   whitelist.unshift(domain);
-  browser.storage.local.set({ whitelist });
-  renderList(whitelistList, whitelist, 'whitelist');
+  await browser.storage.local.set({ whitelist });
   whitelistInput.value = '';
   showToast('Site whitelisted ✓');
 }
@@ -312,3 +318,6 @@ initToggle('toggleAudioTabs', 'showAudioTabs', true);
 initToggle('toggleResetOnUrlChange', 'resetOnUrlChange', true);
 initToggle('toggleRemember', 'rememberVolume', false);
 initToggle('toggleDonate', 'showDonate', true);
+
+// Boost buttons toggle — deactivation is handled by the background script via storage.onChanged
+initToggle('toggleBoostButtons', 'showBoostButtons', true);

@@ -41,7 +41,7 @@
       color: var(--text);
       width: 340px;
       min-height: 200px;
-      padding: 18px;
+      padding: 18px 18px 8px;
       user-select: none;
       transition: background 0.2s, color 0.2s;
     }
@@ -50,24 +50,26 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
 
     .header-left {
       display: flex;
       align-items: center;
       gap: 8px;
+      min-width: 0;
     }
 
     .logo-icon {
       color: var(--blue);
-      font-size: 20px;
+      font-size: 18px;
     }
 
     h1 {
-      font-size: 17px;
+      font-size: 15px;
       font-weight: 600;
       letter-spacing: -0.3px;
+      white-space: nowrap;
     }
 
     .subtitle {
@@ -113,6 +115,7 @@
       font-size: 12px;
       color: var(--text-muted);
       margin-top: 6px;
+      margin-bottom: 10px;
     }
 
     .slider-labels .vol-display {
@@ -185,6 +188,15 @@
     .reset-row {
       margin-bottom: 16px;
     }
+
+    .merged-row {
+      display: none;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    #btnMergedDefault { flex: 3; }
+    #btnMergedReset   { flex: 2; }
 
     .btn-reset {
       width: 100%;
@@ -278,24 +290,8 @@
     }
 
     .btn-gear {
-      background: none;
-      border: none;
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 6px;
       color: var(--text-muted);
       font-size: 17px;
-      line-height: 1;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .btn-gear:hover {
-      background: var(--surface);
-      color: var(--text);
-      transform: rotate(30deg);
     }
 
     .header-right {
@@ -304,7 +300,7 @@
       gap: 2px;
     }
 
-    .btn-dark {
+    .btn-header {
       background: none;
       border: none;
       cursor: pointer;
@@ -318,9 +314,14 @@
       justify-content: center;
     }
 
-    .btn-dark:hover {
+    .btn-header:hover {
       background: var(--surface);
       transform: scale(1.15);
+    }
+
+    .btn-gear:hover {
+      color: var(--text);
+      transform: rotate(30deg);
     }
 
     .blocked-banner {
@@ -388,7 +389,8 @@
     body.disabled-ui .slider-wrap,
     body.disabled-ui .slider-labels,
     body.disabled-ui .btn-row,
-    body.disabled-ui .reset-row {
+    body.disabled-ui .reset-row,
+    body.disabled-ui .merged-row {
       opacity: 0.55;
     }
 
@@ -400,31 +402,18 @@
     }
 
     .donate-bar {
-      display: flex;
-      justify-content: flex-end;
-      padding-top: 10px;
-      margin-top: 6px;
+      display: block;
+      height: 10px;
+      margin-top: 5px;
       border-top: 1px solid var(--border);
     }
 
     .btn-donate {
-      background: none;
-      border: none;
-      cursor: pointer;
-      font-size: 12px;
-      color: var(--text-muted);
-      padding: 3px 7px;
-      border-radius: 6px;
-      font-family: inherit;
-      font-weight: 500;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 3px;
+      display: none;
+      color: #ef4444;
     }
 
     .btn-donate:hover {
-      color: #ef4444;
       background: var(--surface);
     }
   </style>
@@ -437,8 +426,9 @@
     <h1>Gain - Volume Booster</h1>
   </div>
   <div class="header-right">
-    <button class="btn-dark" id="btnDark" title="Toggle dark mode">🌙</button>
-    <button class="btn-gear" id="btnGear" title="Settings">⚙️</button>
+    <button class="btn-header btn-donate" id="btnDonate" title="Support Gain with Bitcoin">❤️</button>
+    <button class="btn-header btn-dark" id="btnDark" title="Toggle dark mode">🌙</button>
+    <button class="btn-header btn-gear" id="btnGear" title="Settings">⚙️</button>
   </div>
 </div>
 
@@ -449,7 +439,7 @@
 <div class="access-card" id="siteAccessBox">
   <div class="access-text" id="siteAccessText">Allow this site to auto-start Gain on future visits.</div>
   <div class="access-actions">
-    <button class="btn-reset" id="btnAllowSite">Always allow on this site</button>
+    <button class="btn-reset" id="btnAllowSite">Add to Whitelist</button>
     <button class="btn-access-secondary" id="btnDismissSiteAccess">Not now</button>
   </div>
 </div>
@@ -466,16 +456,19 @@
   <span>600%</span>
 </div>
 
-<br/>
-
-<div class="btn-row">
+<div class="btn-row" id="boostRow" style="display:none;">
   <button class="btn" id="btnDefault">↩ Default</button>
   <button class="btn" id="btnVoice">🎙 Voice boost</button>
   <button class="btn" id="btnBass">🚀 Bass boost</button>
 </div>
 
-<div class="reset-row">
+<div class="reset-row" id="resetRow" style="display:none;">
   <button class="btn-reset" id="btnReset">↻ Reset to 100%</button>
+</div>
+
+<div class="merged-row" id="mergedRow">
+  <button class="btn" id="btnMergedDefault">↩ Default</button>
+  <button class="btn" id="btnMergedReset">↻ Reset to 100%</button>
 </div>
 
 <div class="tabs-section">
@@ -483,9 +476,7 @@
   <div id="tabsList"><p class="no-tabs">No tabs playing audio.</p></div>
 </div>
 
-<div class="donate-bar" id="donateBar">
-  <button class="btn-donate" id="btnDonate" title="Support Gain with Bitcoin">❤️ Support</button>
-</div>
+<div class="donate-bar" id="donateBar"></div>
 
 <script src="site-utils.js"></script>
 <script src="popup.js"></script>

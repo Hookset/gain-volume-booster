@@ -6,6 +6,7 @@ const browserGlobals = {
   // DOM / Web APIs
   window: 'writable',
   document: 'readonly',
+  localStorage: 'readonly',
   location: 'readonly',
   history: 'readonly',
   AudioContext: 'readonly',
@@ -63,7 +64,7 @@ module.exports = [
     },
   },
   {
-    files: ['background.js', 'popup.js', 'options.js', 'content.js'],
+    files: ['background.js', 'popup.js', 'options.js', 'options-theme.js', 'content.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',

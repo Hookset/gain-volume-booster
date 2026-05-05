@@ -23,7 +23,7 @@
   let data;
   try {
     data = await browser.storage.local.get(
-      ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', `site_${hostname}`]
+      ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', 'showBoostButtons', `site_${hostname}`]
     );
   } catch (e) {
     window.__gainInjecting = false;
@@ -53,12 +53,22 @@
     ? siteState
     : { volume: defaultVol, bass: false, voice: false };
 
+  if (data.showBoostButtons === false) {
+    const hadRememberedBoost = !!(startState.bass || startState.voice);
+    startState.bass = false;
+    startState.voice = false;
+
+    if (remember && siteState && hadRememberedBoost) {
+      await browser.storage.local.set({ [`site_${hostname}`]: startState }).catch(() => {});
+    }
+  }
+
   window.__gainInjected = true;
   window.__gainInjecting = false;
   initAudio(startState);
 
   function initAudio(startState) {
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioCtx = new AudioContext();
     const mediaSourceMap = new WeakMap();
 
     let lastUrl = location.href;
@@ -266,8 +276,6 @@
       observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    window.addEventListener('pagehide', () => observer.disconnect(), { once: true });
-
     function handleUrlChange() {
       if (location.href === lastUrl) return;
       lastUrl = location.href;
@@ -276,15 +284,20 @@
 
     window.addEventListener('popstate', handleUrlChange);
     window.addEventListener('hashchange', handleUrlChange);
-    setInterval(handleUrlChange, 1000);
+    const urlPollInterval = setInterval(handleUrlChange, 1000);
+
+    window.addEventListener('pagehide', () => {
+      observer.disconnect();
+      clearInterval(urlPollInterval);
+    }, { once: true });
 
     document.addEventListener('click', () => {
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
     }, { once: true });
 
     browser.runtime.onMessage.addListener((msg, sender) => {
       if (sender.id !== browser.runtime.id) return;
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
 
       if (msg.type === MSG.SET_VOLUME) {
         setCurrentState({ volume: msg.value });

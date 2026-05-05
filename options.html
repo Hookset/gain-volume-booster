@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <title>Gain - Settings</title>
+  <script src="options-theme.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -22,7 +23,7 @@
       --sidebar-w: 200px;
     }
 
-    body.dark {
+    html.dark {
       --bg: #0f172a;
       --surface: #1e293b;
       --border: #334155;
@@ -31,6 +32,14 @@
       --blue-light: #1e3a5f;
       --active-btn: #1e3a5f;
       --danger-light: #450a0a;
+    }
+
+    html.theme-loading {
+      background: #0f172a;
+    }
+
+    html.theme-loading body {
+      visibility: hidden;
     }
 
     body {
@@ -453,12 +462,12 @@
       background: #fee2e2;
       border-color: #ef4444;
     }
-    body.dark .vol-warning {
+    html.dark .vol-warning {
       background: #422006;
       color: #fcd34d;
       border-color: #d97706;
     }
-    body.dark .vol-warning.red {
+    html.dark .vol-warning.red {
       background: #450a0a;
       color: #fca5a5;
       border-color: #ef4444;
@@ -470,7 +479,7 @@
       border-color: #f59e0b;
       background: #fffbeb;
     }
-    body.dark .health-warning-card {
+    html.dark .health-warning-card {
       border-color: #d97706;
       background: #1c1408;
     }
@@ -480,7 +489,7 @@
       color: #92400e;
       margin-bottom: 12px;
     }
-    body.dark .health-warning-title { color: #fcd34d; }
+    html.dark .health-warning-title { color: #fcd34d; }
     .health-warning-card p {
       font-size: 13px;
       color: #78350f;
@@ -488,7 +497,7 @@
       margin-bottom: 10px;
     }
     .health-warning-card p:last-child { margin-bottom: 0; }
-    body.dark .health-warning-card p { color: #fde68a; }
+    html.dark .health-warning-card p { color: #fde68a; }
 
     /* ── About ── */
     .about-logo { font-size: 48px; text-align: center; margin-bottom: 12px; }
@@ -628,9 +637,9 @@
         </div>
       </div>
 
-      <!-- Other settings -->
+      <!-- Behavior settings -->
       <div class="card">
-        <div class="card-title">Preferences</div>
+        <div class="card-title">Behavior</div>
 
         <div class="setting-row default-vol-row">
           <div class="setting-info">
@@ -650,10 +659,10 @@
 
         <div class="setting-row">
           <div class="setting-info">
-            <strong>Show audio tabs list</strong>
-            <span>Display tabs playing audio in the popup</span>
+            <strong>Remember sound settings per site</strong>
+            <span>Restore your set sound settings when revisiting a site</span>
           </div>
-          <div class="small-toggle-track on" id="toggleAudioTabs">
+          <div class="small-toggle-track" id="toggleRemember">
             <div class="toggle-thumb"></div>
           </div>
         </div>
@@ -664,17 +673,33 @@
             <span>Reset volume and boosts when sites switch videos or streams</span>
             <small class="setting-example">e.g., turn this off if you do not want to reset volume settings while listening to a playlist.</small>
           </div>
-          <div class="small-toggle-track on" id="toggleResetOnUrlChange">
+          <div class="small-toggle-track" id="toggleResetOnUrlChange">
+            <div class="toggle-thumb"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Interface settings -->
+      <div class="card">
+        <div class="card-title">Interface</div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <strong>Show audio tabs list</strong>
+            <span>Display tabs playing audio in the popup</span>
+          </div>
+          <div class="small-toggle-track" id="toggleAudioTabs">
             <div class="toggle-thumb"></div>
           </div>
         </div>
 
         <div class="setting-row">
           <div class="setting-info">
-            <strong>Remember volume per site</strong>
-            <span>Restore your last volume setting when revisiting a site</span>
+            <strong>Show bass/voice boost buttons</strong>
+            <span>Show the Voice boost and Bass boost buttons in the popup</span>
           </div>
-          <div class="small-toggle-track" id="toggleRemember">
+          <div class="small-toggle-track" id="toggleBoostButtons">
             <div class="toggle-thumb"></div>
           </div>
         </div>
@@ -684,7 +709,7 @@
             <strong>Show support button</strong>
             <span>Display the Support button at the bottom of the popup</span>
           </div>
-          <div class="small-toggle-track on" id="toggleDonate">
+          <div class="small-toggle-track" id="toggleDonate">
             <div class="toggle-thumb"></div>
           </div>
         </div>
@@ -710,7 +735,7 @@
     <div class="tab-panel" id="panel-about">
       <div class="about-logo">🔊</div>
       <div class="about-name">Gain</div>
-      <div class="about-ver">Version 1.0.2 · Firefox Extension</div>
+      <div class="about-ver">Version 1.1.0 · Firefox Extension</div>
 
       <div class="card">
         <div class="about-section">

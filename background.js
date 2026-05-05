@@ -64,9 +64,46 @@ async function resetTabAudio(tabId) {
       type: MSG.RESET_AUDIO,
       state: DEFAULT_AUDIO_STATE
     });
-  } catch (e) {}
+  } catch (e) {
+    if (!isExpectedTabError(e)) console.warn('[Gain] resetTabAudio:', e && e.message);
+  }
 
   clearBadge(tabId);
+}
+
+async function deactivateBoostsAllTabs() {
+  let tabs = [];
+  try {
+    tabs = await browser.tabs.query({});
+  } catch (e) {
+    return;
+  }
+
+  await Promise.all(tabs.map(async (tab) => {
+    if (!isSupportedTabUrl(tab.url)) return;
+    try { await browser.tabs.sendMessage(tab.id, { type: MSG.SET_BASS_BOOST, enabled: false }); } catch (e) {}
+    try { await browser.tabs.sendMessage(tab.id, { type: MSG.SET_VOICE_BOOST, enabled: false }); } catch (e) {}
+  }));
+}
+
+async function clearRememberedBoosts() {
+  let data = {};
+  try {
+    data = await browser.storage.local.get(null);
+  } catch (e) {
+    return;
+  }
+
+  const updates = {};
+  Object.entries(data).forEach(([key, value]) => {
+    if (!key.startsWith('site_') || !value || typeof value !== 'object') return;
+    if (value.bass !== true && value.voice !== true) return;
+    updates[key] = { ...value, bass: false, voice: false };
+  });
+
+  if (Object.keys(updates).length) {
+    await browser.storage.local.set(updates);
+  }
 }
 
 async function resetTabsMatching(predicate) {
@@ -131,8 +168,8 @@ function shouldBlockSite(settings, hostname) {
 }
 
 function shouldAutoInject(settings, hostname) {
-  const whitelist = settings.whitelist || [];
-  return matchesList(whitelist, hostname) && !shouldBlockSite(settings, hostname);
+  return !shouldBlockSite(settings, hostname) &&
+         matchesList(settings.whitelist || [], hostname);
 }
 
 
@@ -140,7 +177,9 @@ async function injectContentScript(tabId) {
   try {
     await browser.tabs.executeScript(tabId, { file: 'site-utils.js', runAt: 'document_idle' });
     await browser.tabs.executeScript(tabId, { file: 'content.js', runAt: 'document_idle' });
-  } catch (e) {}
+  } catch (e) {
+    if (!isExpectedTabError(e)) console.warn('[Gain] injectContentScript:', e && e.message);
+  }
 }
 
 async function maybeInjectForTab(tabId, url) {
@@ -233,12 +272,31 @@ browser.runtime.onInstalled.addListener(() => {
   ignorePromiseError(() => maybeInjectOpenTabs());
 });
 
-browser.permissions.onAdded.addListener(() => {
+browser.permissions.onAdded.addListener(async (permissions) => {
+  // Firefox closes the popup during permissions.request(), so the whitelist
+  // write in popup.js may never run. Auto-whitelist any site-specific
+  // permission that just got granted so the popup works on next open.
+  const seen = new Set();
+  for (const origin of (permissions.origins || [])) {
+    const match = origin.match(/^\*:\/\/([^/]+)\/\*$/);
+    if (!match) continue;
+    const hostname = match[1].replace(/^\*\./, '');
+    if (!hostname || hostname === '*' || seen.has(hostname)) continue;
+    seen.add(hostname);
+    await addWhitelistedSite(hostname).catch(() => {});
+  }
   ignorePromiseError(() => maybeInjectOpenTabs());
 });
 
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+
+  if (changes.showBoostButtons && changes.showBoostButtons.newValue === false) {
+    ignorePromiseError(async () => {
+      await clearRememberedBoosts();
+      await deactivateBoostsAllTabs();
+    });
+  }
 
   const modeChanged = !!changes.mode;
   const blacklistChanged = !!changes.blacklist;
