@@ -62,7 +62,7 @@ Gain now uses a permission model built around **click-to-use** plus optional **p
 - In normal use, clicking the popup can activate Gain on the current tab through `activeTab`
 - In **blacklist mode**, Gain works unless the site is explicitly blocked
 - In **whitelist mode**, Gain only works on sites already added to the whitelist
-- If you choose **Always allow on this site**, Firefox asks for permission for that site only, and Gain can auto-start there on future visits
+- If you choose **Add to Whitelist**, Firefox asks for permission for that site only, and Gain can auto-start there on future visits
 
 When Gain is active on a page, `content.js` sets up a Web Audio API pipeline for page media:
 
