@@ -495,13 +495,16 @@ async function loadAudioTabs() {
 }
 
 browser.storage.local.get('darkMode').then((data) => {
-  if (data.darkMode) {
+  if (data.darkMode === true) {
     document.body.classList.add('dark');
     document.getElementById('btnDark').textContent = '☀️';
   }
-  try {
-    localStorage.setItem('gain.darkMode', data.darkMode ? 'true' : 'false');
-  } catch (e) {}
+
+  if (typeof data.darkMode === 'boolean') {
+    try {
+      localStorage.setItem('gain.darkMode', data.darkMode ? 'true' : 'false');
+    } catch (e) {}
+  }
 });
 
 document.getElementById('btnDark').addEventListener('click', () => {

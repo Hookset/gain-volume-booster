@@ -45,7 +45,19 @@ function applyDark(on) {
   } catch (e) {}
 }
 
-browser.storage.local.get('darkMode', (d) => applyDark(!!d.darkMode));
+browser.storage.local.get('darkMode', (d) => {
+  if (typeof d.darkMode === 'boolean') {
+    applyDark(d.darkMode);
+    return;
+  }
+
+  try {
+    const cachedDarkMode = localStorage.getItem('gain.darkMode');
+    applyDark(cachedDarkMode === 'true');
+  } catch (e) {
+    applyDark(false);
+  }
+});
 
 document.getElementById('darkToggle').addEventListener('click', () => {
   const on = !document.body.classList.contains('dark');
