@@ -76,7 +76,15 @@
       font-size: 12.5px;
       color: var(--text-muted);
       line-height: 1.5;
-      margin-bottom: 16px;
+      margin-bottom: 12px;
+    }
+
+    .subtitle.hidden {
+      display: none;
+    }
+
+    body.tooltip-hidden .slider-wrap {
+      margin-top: 16px;
     }
 
     .slider-wrap {
@@ -444,7 +452,7 @@
   </div>
 </div>
 
-<p class="subtitle">Use the slider below to control the volume of the current tab.</p>
+<p class="subtitle" id="popupTooltip">Use the slider below to control the volume of the current tab.</p>
 
 <div class="slider-wrap">
   <input type="range" id="volumeSlider" min="0" max="600" value="100" />
