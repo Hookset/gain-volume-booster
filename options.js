@@ -318,6 +318,7 @@ initToggle('toggleAudioTabs', 'showAudioTabs', true);
 initToggle('toggleResetOnUrlChange', 'resetOnUrlChange', true);
 initToggle('toggleRemember', 'rememberVolume', false);
 initToggle('toggleDonate', 'showDonate', true);
+initToggle('togglePopupTooltip', 'showPopupTooltip', true);
 
 // Boost buttons toggle — deactivation is handled by the background script via storage.onChanged
 initToggle('toggleBoostButtons', 'showBoostButtons', true);

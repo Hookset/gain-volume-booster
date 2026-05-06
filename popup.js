@@ -15,6 +15,7 @@ const siteAccessBox = document.getElementById('siteAccessBox');
 const siteAccessText = document.getElementById('siteAccessText');
 const btnAllowSite = document.getElementById('btnAllowSite');
 const btnDismissSiteAccess = document.getElementById('btnDismissSiteAccess');
+const popupTooltip = document.getElementById('popupTooltip');
 
 let currentTabId = null;
 let currentHostname = '';
@@ -96,6 +97,13 @@ async function applyBoostButtonsVisibility() {
   document.getElementById('boostRow').style.display = show ? '' : 'none';
   document.getElementById('resetRow').style.display = show ? '' : 'none';
   document.getElementById('mergedRow').style.display = show ? 'none' : 'flex';
+}
+
+async function applyPopupTooltipVisibility() {
+  const data = await browser.storage.local.get('showPopupTooltip');
+  const show = data.showPopupTooltip !== false;
+  popupTooltip.classList.toggle('hidden', !show);
+  document.body.classList.toggle('tooltip-hidden', !show);
 }
 
 function setControlsEnabled(enabled) {
@@ -509,6 +517,7 @@ document.getElementById('btnDark').addEventListener('click', () => {
 loadAudioTabs().catch(() => {});
 applyAudioTabsVisibility().catch(() => {});
 applyBoostButtonsVisibility().catch(() => {});
+applyPopupTooltipVisibility().catch(() => {});
 setInterval(loadAudioTabs, 2000);
 
 btnDonate.addEventListener('click', () => {
