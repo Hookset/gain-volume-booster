@@ -23,7 +23,7 @@
   let data;
   try {
     data = await browser.storage.local.get(
-      ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', 'showBoostButtons', `site_${hostname}`]
+      ['mode', 'blacklist', 'whitelist', 'defaultVolume', 'rememberVolume', 'showBoostButtons', 'resetOnUrlChange', `site_${hostname}`]
     );
   } catch (e) {
     window.__gainInjecting = false;
@@ -48,10 +48,16 @@
 
   const remember = data.rememberVolume === true;
   const siteState = data[`site_${hostname}`];
+  const tabRestore = await browser.runtime.sendMessage({
+    type: MSG.GET_TAB_AUDIO_STATE,
+    hostname,
+    restoreAcrossUrlChange: data.resetOnUrlChange === false
+  }).catch(() => ({ state: null, suppressSiteState: false }));
+  const tabState = tabRestore && tabRestore.state;
   const defaultVol = data.defaultVolume ?? 100;
-  const startState = remember && siteState
+  const startState = tabState || (!tabRestore.suppressSiteState && remember && siteState
     ? siteState
-    : { volume: defaultVol, bass: false, voice: false };
+    : { volume: defaultVol, bass: false, voice: false });
 
   if (data.showBoostButtons === false) {
     const hadRememberedBoost = !!(startState.bass || startState.voice);
@@ -107,6 +113,15 @@
       browser.runtime.sendMessage({ type: MSG.SET_BADGE, volume }).catch(() => {});
     }
 
+    function saveTabAudioState(state = currentState) {
+      browser.runtime.sendMessage({
+        type: MSG.SET_TAB_AUDIO_STATE,
+        hostname,
+        url: location.href,
+        state
+      }).catch(() => {});
+    }
+
     async function getDefaultReset() {
       try {
         const data = await browser.storage.local.get(['defaultVolume', 'rememberVolume', 'resetOnUrlChange']);
@@ -138,6 +153,7 @@
       }
 
       sendBadge(reset.state.volume);
+      saveTabAudioState(reset.state);
     }
 
     function applyState() {
@@ -257,6 +273,8 @@
     if (!isNeutralState()) {
       buildProcessingGraph();
     }
+    sendBadge(currentState.volume);
+    saveTabAudioState();
 
     document.querySelectorAll('audio, video').forEach(connectElement);
 
@@ -301,19 +319,23 @@
 
       if (msg.type === MSG.SET_VOLUME) {
         setCurrentState({ volume: msg.value });
+        saveTabAudioState();
       }
 
       if (msg.type === MSG.SET_BASS_BOOST) {
         setCurrentState({ bass: msg.enabled });
+        saveTabAudioState();
       }
 
       if (msg.type === MSG.SET_VOICE_BOOST) {
         setCurrentState({ voice: msg.enabled });
+        saveTabAudioState();
       }
 
       if (msg.type === MSG.RESET_AUDIO) {
         observer.disconnect();
         rebuildAudio(msg.state || { volume: 100, bass: false, voice: false });
+        saveTabAudioState();
         if (document.body) {
           observer.observe(document.body, { childList: true, subtree: true });
         }

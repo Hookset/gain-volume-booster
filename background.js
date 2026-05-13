@@ -1,11 +1,37 @@
 // background.js
-// Manages toolbar badge updates and auto-injects on whitelisted sites with granted access.
+// Manages toolbar badges plus permission-aware and saved-tab auto-injection.
 
 const DEFAULT_AUDIO_STATE = {
   volume: 100,
   bass: false,
   voice: false
 };
+const TAB_AUDIO_STATE_PREFIX = 'tabAudioState_';
+const TAB_AUDIO_RESET_PREFIX = 'tabAudioReset_';
+
+function tabAudioStateKey(tabId) {
+  return `${TAB_AUDIO_STATE_PREFIX}${tabId}`;
+}
+
+function tabAudioResetKey(tabId) {
+  return `${TAB_AUDIO_RESET_PREFIX}${tabId}`;
+}
+
+function sanitizeAudioState(state) {
+  if (!state || typeof state !== 'object') return null;
+
+  return {
+    volume: typeof state.volume === 'number' && isFinite(state.volume)
+      ? Math.max(0, Math.min(600, state.volume))
+      : 100,
+    bass: state.bass === true,
+    voice: state.voice === true
+  };
+}
+
+function isNeutralAudioState(state) {
+  return state && state.volume === 100 && !state.bass && !state.voice;
+}
 
 function isExpectedTabError(e) {
   const msg = (e && e.message) || '';
@@ -47,6 +73,84 @@ function clearBadge(tabId) {
   setBadgeText({ text: '', tabId });
 }
 
+async function setTabAudioState(tabId, url, state, hostname = '') {
+  if (tabId === undefined || tabId === null) return;
+
+  const nextState = sanitizeAudioState(state);
+  const key = tabAudioStateKey(tabId);
+  if (!nextState || isNeutralAudioState(nextState)) {
+    await browser.storage.local.remove([key, tabAudioResetKey(tabId)]);
+    return;
+  }
+
+  const tabHostname = normalizeHostname(hostname) || getHostnameFromUrl(url);
+  await browser.storage.local.set({
+    [key]: {
+      hostname: tabHostname,
+      url: url || '',
+      state: nextState
+    }
+  });
+  await browser.storage.local.remove(tabAudioResetKey(tabId));
+}
+
+async function getTabAudioRestore(tabId, url, hostname = '', restoreAcrossUrlChange = false) {
+  const emptyRestore = { state: null, suppressSiteState: false };
+  if (tabId === undefined || tabId === null) return emptyRestore;
+
+  const resetKey = tabAudioResetKey(tabId);
+  const key = tabAudioStateKey(tabId);
+  const data = await browser.storage.local.get([key, resetKey]);
+  const resetEntry = data[resetKey];
+  let suppressSiteState = false;
+  const tabHostname = normalizeHostname(hostname) || getHostnameFromUrl(url);
+
+  if (resetEntry && typeof resetEntry === 'object') {
+    const resetHostname = normalizeHostname(resetEntry.hostname);
+    if (!resetHostname || !tabHostname || resetHostname === tabHostname) {
+      suppressSiteState = true;
+    }
+  }
+
+  const entry = data[key];
+  if (!entry || typeof entry !== 'object') {
+    return { state: null, suppressSiteState };
+  }
+
+  if (entry.hostname && tabHostname && entry.hostname !== tabHostname) {
+    await browser.storage.local.remove(key);
+    return { state: null, suppressSiteState };
+  }
+
+  if (!restoreAcrossUrlChange && entry.url && url && entry.url !== url) {
+    await browser.storage.local.remove(key);
+    return { state: null, suppressSiteState };
+  }
+
+  return {
+    state: sanitizeAudioState(entry.state),
+    suppressSiteState
+  };
+}
+
+async function clearTabAudioState(tabId, suppressSiteState = false, url = '', hostname = '') {
+  if (tabId === undefined || tabId === null) return;
+  const updates = [browser.storage.local.remove(tabAudioStateKey(tabId))];
+
+  if (suppressSiteState) {
+    updates.push(browser.storage.local.set({
+      [tabAudioResetKey(tabId)]: {
+        hostname: normalizeHostname(hostname) || getHostnameFromUrl(url),
+        url: url || ''
+      }
+    }));
+  } else {
+    updates.push(browser.storage.local.remove(tabAudioResetKey(tabId)));
+  }
+
+  await Promise.all(updates);
+}
+
 
 function getAddedDomains(oldList = [], newList = []) {
   const oldSet = new Set(oldList);
@@ -68,6 +172,7 @@ async function resetTabAudio(tabId) {
     if (!isExpectedTabError(e)) console.warn('[Gain] resetTabAudio:', e && e.message);
   }
 
+  await clearTabAudioState(tabId).catch(() => {});
   clearBadge(tabId);
 }
 
@@ -103,6 +208,44 @@ async function clearRememberedBoosts() {
 
   if (Object.keys(updates).length) {
     await browser.storage.local.set(updates);
+  }
+}
+
+async function clearSavedTabBoosts() {
+  let data = {};
+  try {
+    data = await browser.storage.local.get(null);
+  } catch (e) {
+    return;
+  }
+
+  const updates = {};
+  const removals = [];
+
+  Object.entries(data).forEach(([key, entry]) => {
+    if (!key.startsWith(TAB_AUDIO_STATE_PREFIX) || !entry || typeof entry !== 'object') return;
+
+    const state = sanitizeAudioState(entry.state);
+    if (!state || (state.bass !== true && state.voice !== true)) return;
+
+    const nextState = { ...state, bass: false, voice: false };
+    if (isNeutralAudioState(nextState)) {
+      removals.push(key);
+      return;
+    }
+
+    updates[key] = {
+      ...entry,
+      state: nextState
+    };
+  });
+
+  if (Object.keys(updates).length) {
+    await browser.storage.local.set(updates);
+  }
+
+  if (removals.length) {
+    await browser.storage.local.remove(removals);
   }
 }
 
@@ -167,12 +310,6 @@ function shouldBlockSite(settings, hostname) {
   return !matchesList(whitelist, hostname);
 }
 
-function shouldAutoInject(settings, hostname) {
-  return !shouldBlockSite(settings, hostname) &&
-         matchesList(settings.whitelist || [], hostname);
-}
-
-
 async function injectContentScript(tabId) {
   try {
     await browser.tabs.executeScript(tabId, { file: 'site-utils.js', runAt: 'document_idle' });
@@ -188,8 +325,16 @@ async function maybeInjectForTab(tabId, url) {
   const hostname = getHostnameFromUrl(url);
   if (!hostname) return;
 
-  const settings = await browser.storage.local.get(['mode', 'blacklist', 'whitelist']);
-  if (!shouldAutoInject(settings, hostname)) return;
+  const settings = await browser.storage.local.get(['mode', 'blacklist', 'whitelist', 'resetOnUrlChange']);
+  if (shouldBlockSite(settings, hostname)) return;
+
+  const tabRestore = await getTabAudioRestore(tabId, url, hostname, settings.resetOnUrlChange === false);
+  if (tabRestore.state) {
+    await injectContentScript(tabId);
+    return;
+  }
+
+  if (!matchesList(settings.whitelist || [], hostname)) return;
 
   const hasAccess = await hasPersistentSiteAccess(hostname);
   if (!hasAccess) return;
@@ -223,6 +368,17 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     return getDismissedPromptUrl(msg.tabId);
   }
 
+  if (msg.type === MSG.GET_TAB_AUDIO_STATE) {
+    const tab = sender.tab || {};
+    return getTabAudioRestore(tab.id, tab.url, msg.hostname, msg.restoreAcrossUrlChange === true);
+  }
+
+  if (msg.type === MSG.SET_TAB_AUDIO_STATE) {
+    const tab = sender.tab || {};
+    const tabId = tab.id ?? msg.tabId;
+    return setTabAudioState(tabId, tab.url || msg.url, msg.state, msg.hostname);
+  }
+
   if (msg.type !== MSG.SET_BADGE) return;
 
   const tabId = msg.tabId ?? (sender.tab && sender.tab.id);
@@ -241,12 +397,15 @@ browser.runtime.onMessage.addListener((msg, sender) => {
 
 browser.tabs.onRemoved.addListener((tabId) => {
   clearBadge(tabId);
+  ignorePromiseError(() => clearTabAudioState(tabId));
   ignorePromiseError(() => clearDismissedPrompt(tabId));
 });
 
 browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status === 'loading') {
+    const loadingUrl = changeInfo.url || (tab && tab.url);
     clearBadge(tabId);
+    ignorePromiseError(() => clearTabAudioState(tabId, true, loadingUrl));
     ignorePromiseError(() => clearDismissedPrompt(tabId));
     return;
   }
@@ -294,6 +453,7 @@ browser.storage.onChanged.addListener((changes, area) => {
   if (changes.showBoostButtons && changes.showBoostButtons.newValue === false) {
     ignorePromiseError(async () => {
       await clearRememberedBoosts();
+      await clearSavedTabBoosts();
       await deactivateBoostsAllTabs();
     });
   }

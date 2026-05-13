@@ -79,9 +79,20 @@ function resetAudio(tabId, state) {
 }
 
 async function saveState(volume, bass, voice) {
+  const state = { volume, bass, voice };
+  if (currentTabId !== null) {
+    browser.runtime.sendMessage({
+      type: MSG.SET_TAB_AUDIO_STATE,
+      tabId: currentTabId,
+      url: currentUrl,
+      hostname: currentHostname,
+      state
+    }).catch(() => {});
+  }
+
   const data = await browser.storage.local.get('rememberVolume');
   if (data.rememberVolume === true && currentHostname) {
-    await browser.storage.local.set({ [`site_${currentHostname}`]: { volume, bass, voice } });
+    await browser.storage.local.set({ [`site_${currentHostname}`]: state });
   }
 }
 
@@ -134,17 +145,33 @@ function hideSiteAccess() {
   siteAccessBox.classList.remove('show');
 }
 
-function applyVolume(val) {
-  val = Math.max(0, Math.min(600, val));
+function clampVolume(val) {
+  return Math.max(0, Math.min(600, val));
+}
+
+function renderVolume(val) {
+  val = clampVolume(val);
   slider.value = val;
   volDisplay.textContent = `Volume: ${val}%`;
   updateSliderFill(val);
+  return val;
+}
 
+function commitVolume(val, { persist = true } = {}) {
   if (!controlsEnabled || currentTabId === null) return;
 
+  val = clampVolume(val);
+
   sendVolume(currentTabId, val);
-  saveState(val, bassActive, voiceActive).catch(() => {});
+  if (persist) {
+    saveState(val, bassActive, voiceActive).catch(() => {});
+  }
   sendBadge(val);
+}
+
+function applyVolume(val, options) {
+  val = renderVolume(val);
+  commitVolume(val, options);
 }
 
 function resetUiState(volume) {
@@ -337,6 +364,13 @@ slider.addEventListener('input', () => {
   if (!controlsEnabled) return;
   applyVolume(parseInt(slider.value, 10));
 });
+
+slider.addEventListener('wheel', (e) => {
+  if (!controlsEnabled) return;
+  e.preventDefault();
+  const direction = e.deltaY < 0 ? 1 : -1;
+  applyVolume(parseInt(slider.value, 10) + (direction * 2));
+}, { passive: false });
 
 document.addEventListener('keydown', (e) => {
   if (!controlsEnabled || document.activeElement === volInput) return;

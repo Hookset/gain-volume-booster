@@ -61,6 +61,8 @@ const MSG = {
   SET_VOICE_BOOST:                  'SET_VOICE_BOOST',
   RESET_AUDIO:                      'RESET_AUDIO',
   GET_STATE:                        'GET_STATE',
+  GET_TAB_AUDIO_STATE:              'GET_TAB_AUDIO_STATE',
+  SET_TAB_AUDIO_STATE:              'SET_TAB_AUDIO_STATE',
   SET_BADGE:                        'SET_BADGE',
   ADD_WHITELIST_SITE:               'ADD_WHITELIST_SITE',
   DISMISS_SITE_ACCESS_PROMPT:       'DISMISS_SITE_ACCESS_PROMPT',

@@ -72,7 +72,7 @@ When Gain is active on a page, `content.js` sets up a Web Audio API pipeline for
 MediaElementSource -> Voice filter -> Bass filter -> GainNode -> Compressor -> Output
 ```
 
-Volume changes are sent from the popup to the content script via `browser.tabs.sendMessage`. State is stored locally with `browser.storage.local`, keyed by domain when per-site sound memory is enabled. Same-tab URL changes can reset audio back to the configured default volume with Bass Boost and Voice Boost off, unless that reset is disabled in settings. Hiding the boost buttons also clears stored Bass Boost and Voice Boost state while preserving remembered volume.
+Volume changes are sent from the popup to the content script via `browser.tabs.sendMessage`. Live tab state is cached locally so reinjection can restore the current tab without relying on per-site memory, while deliberate full page reloads clear the live tab state. State is also keyed by domain when per-site sound memory is enabled. Same-tab URL changes can reset audio back to the configured default volume with Bass Boost and Voice Boost off, unless that reset is disabled in settings. Hiding the boost buttons also clears stored Bass Boost and Voice Boost state while preserving remembered volume.
 
 ---
 
