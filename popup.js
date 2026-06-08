@@ -27,11 +27,6 @@ let voiceActive = false;
 let bassActive = false;
 let controlsEnabled = false;
 let siteAccessDismissed = false;
-const DEFAULT_AUDIO_STATE = { volume: 100, bass: false, voice: false };
-
-function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function getSafeFaviconUrl(url) {
   if (!url) return '';
@@ -49,12 +44,11 @@ function getSafeFaviconUrl(url) {
 }
 
 function updateSliderFill(val) {
-  const pct = (val / 600) * 100;
-  const amber = val > 250 && val <= 400;
-  const red = val > 400;
-  const color = red ? '#ef4444' : amber ? '#f59e0b' : '#3b82f6';
-  slider.style.background = `linear-gradient(to right, ${color} ${pct}%, var(--border) ${pct}%)`;
-  volDisplay.style.color = red ? '#ef4444' : amber ? '#f59e0b' : '';
+  const pct = (val / VOL_MAX) * 100;
+  const warnColor = volColor(val);
+  const fillColor = warnColor || '#3b82f6';
+  slider.style.background = `linear-gradient(to right, ${fillColor} ${pct}%, var(--border) ${pct}%)`;
+  volDisplay.style.color = warnColor || '';
 }
 
 function sendBadge(volume) {
@@ -146,7 +140,7 @@ function hideSiteAccess() {
 }
 
 function clampVolume(val) {
-  return Math.max(0, Math.min(600, val));
+  return Math.max(0, Math.min(VOL_MAX, val));
 }
 
 function renderVolume(val) {
@@ -182,7 +176,7 @@ function resetUiState(volume) {
   applyVolume(volume);
 }
 
-function initPopupState(state) {
+function setPopupSliderState(state) {
   voiceActive = state.voice || false;
   bassActive = state.bass || false;
 
@@ -191,6 +185,10 @@ function initPopupState(state) {
   updateSliderFill(state.volume);
   btnVoice.classList.toggle('active', voiceActive);
   btnBass.classList.toggle('active', bassActive);
+}
+
+function initPopupState(state) {
+  setPopupSliderState(state);
   sendBadge(state.volume);
 }
 
@@ -213,8 +211,10 @@ async function getLiveState() {
   if (currentTabId === null) return null;
 
   try {
+    // Returns either a real audio state ({ volume, ... }) or { orphaned: true }
+    // from a post-reload content script that bailed to avoid double-audio.
     const liveState = await browser.tabs.sendMessage(currentTabId, { type: MSG.GET_STATE });
-    if (liveState && typeof liveState.volume === 'number') {
+    if (liveState && (typeof liveState.volume === 'number' || liveState.orphaned)) {
       return liveState;
     }
   } catch (e) {}
@@ -222,11 +222,26 @@ async function getLiveState() {
   return null;
 }
 
+// Read the still-playing volume of an orphaned graph from saved per-tab
+// state, so the popup can display the real level instead of a blank/100.
+async function getOrphanedDisplayState() {
+  if (currentTabId === null) return { ...DEFAULT_AUDIO_STATE };
+  try {
+    const key = TAB_AUDIO_STATE_PREFIX + currentTabId;
+    const data = await browser.storage.local.get(key);
+    const entry = data[key];
+    if (entry && entry.state && typeof entry.state.volume === 'number') {
+      return entry.state;
+    }
+  } catch (e) {}
+  return { ...DEFAULT_AUDIO_STATE };
+}
+
 async function waitForLiveState() {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const state = await getLiveState();
     if (state) return state;
-    await delay(100);
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 
   return null;
@@ -314,16 +329,47 @@ async function initializeTabState() {
 
   const liveState = await ensureInjectedForActiveTab();
   if (liveState) {
-    initPopupState(liveState);
-    setControlsEnabled(true);
+    if (liveState.orphaned) {
+      // The extension was reloaded/updated while this tab had a live audio
+      // graph. The old graph keeps playing but can't be controlled by this
+      // instance; a fresh injection is suppressed to avoid double-audio.
+      // Show the real still-playing level (from saved state) so the slider
+      // and badge match what's audible, with controls disabled.
+      const orphanState = await getOrphanedDisplayState();
+      setPopupSliderState(orphanState);
+      sendBadge(orphanState.volume);
+      setControlsEnabled(false);
+      showBlockedBanner("Gain was recently reloaded — please refresh the page!");
+    } else if (liveState.silenced) {
+      // A previously-intercepted element on this page has had its src
+      // swapped to cross-origin media without CORS. Web Audio silences the
+      // output by spec and the intercept can't be undone. Tell the user
+      // to refresh. Use setPopupSliderState (not initPopupState) so the
+      // red `!` badge content.js set via refreshSilencedBadge stays put.
+      setPopupSliderState(DEFAULT_AUDIO_STATE);
+      setControlsEnabled(false);
+      showBlockedBanner("Audio was disrupted by a mid-stream source change. Refresh the page to restore.");
+    } else if (liveState.corsRestricted) {
+      // Cross-origin media without CORS — Web Audio would silence it,
+      // so the content script skipped the intercept. Controls would do
+      // nothing here; disable them and explain why. Pin the slider to
+      // 100 and clear the badge so the visual matches "Gain isn't
+      // operating here."
+      initPopupState(DEFAULT_AUDIO_STATE);
+      setControlsEnabled(false);
+      showBlockedBanner("This site does not send CORS headers, so Gain is unable to intercept and boost audio.");
+    } else {
+      initPopupState(liveState);
+      setControlsEnabled(true);
 
-    const boostData = await browser.storage.local.get('showBoostButtons');
-    if (boostData.showBoostButtons === false && (voiceActive || bassActive)) {
-      voiceActive = false;
-      bassActive = false;
-      sendVoice(currentTabId, false);
-      sendBass(currentTabId, false);
-      saveState(parseInt(slider.value, 10), false, false).catch(() => {});
+      const boostData = await browser.storage.local.get('showBoostButtons');
+      if (boostData.showBoostButtons === false && (voiceActive || bassActive)) {
+        voiceActive = false;
+        bassActive = false;
+        sendVoice(currentTabId, false);
+        sendBass(currentTabId, false);
+        saveState(parseInt(slider.value, 10), false, false).catch(() => {});
+      }
     }
   } else {
     showBlockedBanner("Gain can't run on this page right now.");
@@ -343,22 +389,29 @@ volDisplay.addEventListener('click', () => {
   volInput.select();
 });
 
-function commitVolInput() {
-  if (!controlsEnabled) return;
-  const val = Math.max(0, Math.min(600, parseInt(volInput.value, 10) || 0));
+function closeVolInput() {
   volInput.classList.remove('visible');
   volDisplay.style.display = '';
+}
+
+function commitVolInput() {
+  if (!controlsEnabled) return;
+  if (!volInput.classList.contains('visible')) return;
+  const val = Math.max(0, Math.min(VOL_MAX, parseInt(volInput.value, 10) || 0));
+  closeVolInput();
   applyVolume(val);
 }
 
 volInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') commitVolInput();
-  if (e.key === 'Escape') {
-    volInput.classList.remove('visible');
-    volDisplay.style.display = '';
-  }
+  if (e.key === 'Escape') closeVolInput();
 });
-volInput.addEventListener('blur', commitVolInput);
+
+document.addEventListener('mousedown', (e) => {
+  if (!volInput.classList.contains('visible')) return;
+  if (e.target === volInput) return;
+  commitVolInput();
+});
 
 slider.addEventListener('input', () => {
   if (!controlsEnabled) return;
@@ -456,8 +509,30 @@ btnAllowSite.addEventListener('click', async () => {
 
   const liveState = await ensureInjectedForActiveTab();
   if (liveState) {
-    initPopupState(liveState);
-    setControlsEnabled(true);
+    if (liveState.orphaned) {
+      const orphanState = await getOrphanedDisplayState();
+      setPopupSliderState(orphanState);
+      sendBadge(orphanState.volume);
+      setControlsEnabled(false);
+      showBlockedBanner("Gain was recently reloaded — please refresh the page!");
+    } else if (liveState.silenced) {
+      setPopupSliderState(DEFAULT_AUDIO_STATE);
+      setControlsEnabled(false);
+      showBlockedBanner("Audio was disrupted by a mid-stream source change. Refresh the page to restore.");
+    } else if (liveState.corsRestricted) {
+      initPopupState(DEFAULT_AUDIO_STATE);
+      setControlsEnabled(false);
+      showBlockedBanner("This site does not send CORS headers, so Gain is unable to intercept and boost audio. Working on a bypass for v1.2!");
+    } else {
+      initPopupState(liveState);
+      setControlsEnabled(true);
+      // Site just transitioned from blocked to allowed. Apply the user's
+      // configured default volume so the unblock matches what a fresh
+      // activation would produce. The background-side handler also fires
+      // off the same RESET_AUDIO via storage.onChanged — doing it here too
+      // eliminates any UI race in the popup itself.
+      await handleDefault();
+    }
   } else {
     showBlockedBanner('Site access was granted, but Gain could not start on this page yet.');
     setControlsEnabled(false);
@@ -482,6 +557,8 @@ btnGear.addEventListener('click', () => {
 });
 
 async function loadAudioTabs() {
+  if (document.querySelector('.tabs-section').style.display === 'none') return;
+
   const [tabs, activeTabs] = await Promise.all([
     browser.tabs.query({ audible: true }),
     browser.tabs.query({ active: true, currentWindow: true })
@@ -530,8 +607,10 @@ async function loadAudioTabs() {
 
 browser.storage.local.get('darkMode').then((data) => {
   if (data.darkMode === true) {
-    document.body.classList.add('dark');
+    document.documentElement.classList.add('dark');
     document.getElementById('btnDark').textContent = '☀️';
+  } else if (data.darkMode === false) {
+    document.documentElement.classList.remove('dark');
   }
 
   if (typeof data.darkMode === 'boolean') {
@@ -542,8 +621,8 @@ browser.storage.local.get('darkMode').then((data) => {
 });
 
 document.getElementById('btnDark').addEventListener('click', () => {
-  const on = !document.body.classList.contains('dark');
-  document.body.classList.toggle('dark', on);
+  const on = !document.documentElement.classList.contains('dark');
+  document.documentElement.classList.toggle('dark', on);
   document.getElementById('btnDark').textContent = on ? '☀️' : '🌙';
   try {
     localStorage.setItem('gain.darkMode', on ? 'true' : 'false');
@@ -551,14 +630,13 @@ document.getElementById('btnDark').addEventListener('click', () => {
   browser.storage.local.set({ darkMode: on });
 });
 
-loadAudioTabs().catch(() => {});
-applyAudioTabsVisibility().catch(() => {});
+applyAudioTabsVisibility().then(() => loadAudioTabs()).catch(() => {});
 applyBoostButtonsVisibility().catch(() => {});
 applyPopupTooltipVisibility().catch(() => {});
 setInterval(loadAudioTabs, 2000);
 
 btnDonate.addEventListener('click', () => {
-  browser.tabs.create({ url: 'https://github.com/Hookset/gain-volume-booster#support' });
+  browser.tabs.create({ url: SUPPORT_URL });
   window.close();
 });
 

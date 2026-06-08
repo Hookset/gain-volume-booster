@@ -42,6 +42,13 @@ const siteUtilsGlobals = {
   isSupportedTabUrl: 'readonly',
   hasPersistentSiteAccess: 'readonly',
   MSG: 'readonly',
+  TAB_AUDIO_STATE_PREFIX: 'readonly',
+  DEFAULT_AUDIO_STATE: 'readonly',
+  VOL_MAX: 'readonly',
+  VOL_AMBER: 'readonly',
+  VOL_RED: 'readonly',
+  volColor: 'readonly',
+  SUPPORT_URL: 'readonly',
 };
 
 module.exports = [
@@ -64,7 +71,7 @@ module.exports = [
     },
   },
   {
-    files: ['background.js', 'popup.js', 'options.js', 'options-theme.js', 'content.js'],
+    files: ['background.js', 'popup.js', 'options.js', 'options-theme.js', 'popup-theme.js', 'content.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'script',

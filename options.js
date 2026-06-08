@@ -45,7 +45,7 @@ function applyDark(on) {
   } catch (e) {}
 }
 
-browser.storage.local.get('darkMode', (d) => {
+browser.storage.local.get('darkMode').then((d) => {
   if (typeof d.darkMode === 'boolean') {
     applyDark(d.darkMode);
     return;
@@ -101,11 +101,12 @@ function renderList(listEl, domains, storageKey) {
 
     removeBtn.addEventListener('click', async () => {
       const idx = domains.indexOf(domain);
-      if (idx !== -1) domains.splice(idx, 1);
+      if (idx === -1) return;
+      domains.splice(idx, 1);
       if (storageKey === 'whitelist') {
         await removeSitePermission(domain);
       }
-      browser.storage.local.set({ [storageKey]: domains });
+      await browser.storage.local.set({ [storageKey]: domains });
       showToast('Site removed');
     });
     item.appendChild(name);
@@ -120,7 +121,7 @@ let blacklist = [];
 const blacklistList = document.getElementById('blacklistList');
 const blacklistInput = document.getElementById('blacklistInput');
 
-browser.storage.local.get('blacklist', (d) => {
+browser.storage.local.get('blacklist').then((d) => {
   blacklist = d.blacklist || [];
   renderList(blacklistList, blacklist, 'blacklist');
 });
@@ -144,7 +145,7 @@ let whitelist = [];
 const whitelistList = document.getElementById('whitelistList');
 const whitelistInput = document.getElementById('whitelistInput');
 
-browser.storage.local.get('whitelist', (d) => {
+browser.storage.local.get('whitelist').then((d) => {
   whitelist = d.whitelist || [];
   renderList(whitelistList, whitelist, 'whitelist');
 });
@@ -198,7 +199,7 @@ whitelistInput.addEventListener('keydown', e => { if (e.key === 'Enter') addWhit
 const modeBlacklist = document.getElementById('modeBlacklist');
 const modeWhitelist = document.getElementById('modeWhitelist');
 
-browser.storage.local.get('mode', (d) => {
+browser.storage.local.get('mode').then((d) => {
   const mode = d.mode || 'blacklist';
   modeBlacklist.classList.toggle('selected', mode === 'blacklist');
   modeWhitelist.classList.toggle('selected', mode === 'whitelist');
@@ -225,20 +226,19 @@ const defaultVolVal = document.getElementById('defaultVolVal');
 const defaultVolInput = document.getElementById('defaultVolInput');
 
 function updateDefaultVolSlider(val) {
-  const pct     = (val / 600) * 100;
-  const amber   = val > 250 && val <= 400;
-  const red     = val > 400;
-  const color   = red ? '#ef4444' : amber ? '#f59e0b' : 'var(--blue)';
+  const pct       = (val / VOL_MAX) * 100;
+  const warnColor = volColor(val);
+  const fillColor = warnColor || 'var(--blue)';
 
-  defaultVolSlider.style.background = `linear-gradient(to right, ${color} ${pct}%, var(--border) ${pct}%)`;
-  defaultVolSlider.style.setProperty('--thumb-color', color);
+  defaultVolSlider.style.background = `linear-gradient(to right, ${fillColor} ${pct}%, var(--border) ${pct}%)`;
+  defaultVolSlider.style.setProperty('--thumb-color', fillColor);
   defaultVolVal.textContent  = val + '%';
-  defaultVolVal.style.color  = red ? '#ef4444' : amber ? '#f59e0b' : '';
+  defaultVolVal.style.color  = warnColor || '';
 
   const warning = document.getElementById('defaultVolWarning');
-  if (val > 250) {
+  if (val > VOL_AMBER) {
     warning.classList.add('show');
-    warning.classList.toggle('red', red);
+    warning.classList.toggle('red', val > VOL_RED);
   } else {
     warning.classList.remove('show', 'red');
   }
@@ -252,7 +252,7 @@ document.getElementById('defaultVolReset').addEventListener('click', () => {
   showToast('Reset to 100%');
 });
 
-browser.storage.local.get('defaultVolume', (d) => {
+browser.storage.local.get('defaultVolume').then((d) => {
   const v = d.defaultVolume ?? 100;
   defaultVolSlider.value = v;
   updateDefaultVolSlider(v);
@@ -273,7 +273,7 @@ document.addEventListener('keydown', (e) => {
   let v = parseInt(defaultVolSlider.value, 10);
   if (e.key === 'ArrowUp' || e.key === 'ArrowRight') {
     e.preventDefault();
-    v = Math.min(600, v + step);
+    v = Math.min(VOL_MAX, v + step);
   } else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') {
     e.preventDefault();
     v = Math.max(0, v - step);
@@ -292,10 +292,15 @@ defaultVolVal.addEventListener('click', () => {
   defaultVolInput.select();
 });
 
-function commitDefaultVolInput() {
-  const v = Math.max(0, Math.min(600, parseInt(defaultVolInput.value, 10) || 0));
+function closeDefaultVolInput() {
   defaultVolInput.classList.remove('visible');
   defaultVolVal.style.display = '';
+}
+
+function commitDefaultVolInput() {
+  if (!defaultVolInput.classList.contains('visible')) return;
+  const v = Math.max(0, Math.min(VOL_MAX, parseInt(defaultVolInput.value, 10) || 0));
+  closeDefaultVolInput();
   defaultVolSlider.value = v;
   updateDefaultVolSlider(v);
   browser.storage.local.set({ defaultVolume: v });
@@ -303,18 +308,20 @@ function commitDefaultVolInput() {
 
 defaultVolInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') commitDefaultVolInput();
-  if (e.key === 'Escape') {
-    defaultVolInput.classList.remove('visible');
-    defaultVolVal.style.display = '';
-  }
+  if (e.key === 'Escape') closeDefaultVolInput();
 });
-defaultVolInput.addEventListener('blur', commitDefaultVolInput);
+
+document.addEventListener('mousedown', (e) => {
+  if (!defaultVolInput.classList.contains('visible')) return;
+  if (e.target === defaultVolInput) return;
+  commitDefaultVolInput();
+});
 
 // ── Small toggles ──────────────────────────────────────
 
 function initToggle(id, storageKey, defaultVal = true) {
   const el = document.getElementById(id);
-  browser.storage.local.get(storageKey, (d) => {
+  browser.storage.local.get(storageKey).then((d) => {
     const on = d[storageKey] ?? defaultVal;
     el.classList.toggle('on', on);
   });

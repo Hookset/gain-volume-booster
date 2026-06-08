@@ -68,3 +68,23 @@ const MSG = {
   DISMISS_SITE_ACCESS_PROMPT:       'DISMISS_SITE_ACCESS_PROMPT',
   GET_DISMISSED_SITE_ACCESS_PROMPT: 'GET_DISMISSED_SITE_ACCESS_PROMPT',
 };
+
+// Storage key prefix for per-tab live audio state. Shared so the popup can
+// read a tab's saved volume directly (e.g. to display the still-playing
+// level when the extension was reloaded and the graph is orphaned).
+const TAB_AUDIO_STATE_PREFIX = 'tabAudioState_';
+
+// Shared audio defaults and volume color thresholds. Single source of truth
+// so popup/options sliders and the toolbar badge stay in sync.
+const DEFAULT_AUDIO_STATE = { volume: 100, bass: false, voice: false };
+const VOL_MAX = 600;
+const VOL_AMBER = 250;
+const VOL_RED = 400;
+
+function volColor(v) {
+  if (v > VOL_RED) return '#ef4444';
+  if (v > VOL_AMBER) return '#f59e0b';
+  return null;
+}
+
+const SUPPORT_URL = 'https://github.com/Hookset/gain-volume-booster#support';

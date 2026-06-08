@@ -1,10 +1,10 @@
 {
   "name": "gain-volume-booster",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "description": "A Firefox extension that boosts audio volume up to **600%** on supported tabs. Clean popup UI, per-site memory, EQ filters, and zero data collection.",
   "main": "background.js",
   "scripts": {
-    "check": "eslint background.js content.js popup.js options.js options-theme.js site-utils.js",
+    "check": "eslint background.js content.js popup.js options.js options-theme.js popup-theme.js site-utils.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
