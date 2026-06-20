@@ -50,9 +50,10 @@ gain/
 |-- content.js          # Web Audio API pipeline injected into approved pages
 |-- site-utils.js       # Shared hostname, domain, and site-permission helpers
 |-- popup.html/js       # Popup UI and click-to-use controls
+|-- popup-theme.js      # Popup dark-mode preload
 |-- options.html/js     # Settings page and list management
 |-- options-theme.js    # Settings dark-mode preload
-`-- icons/              # PNG icons (16, 32, 48, 96, 128px)
+`-- icons/              # PNG icons (16, 32, 48, 96px)
 ```
 
 ---
@@ -69,10 +70,14 @@ Gain uses a permission model built around **click-to-use** plus optional **per-s
 When Gain is active on a page, `content.js` sets up a Web Audio API pipeline for page media:
 
 ```text
-MediaElementSource -> Voice filter -> Bass filter -> GainNode -> Compressor -> Output
+MediaElementSource -> Fade gain -> Voice filter -> Bass filter -> GainNode -> Compressor -> Output
 ```
 
+The per-element fade gain ramps in briefly when a media element is first routed through the pipeline, masking the click that the Web Audio API produces at the moment of interception.
+
 Volume changes are sent from the popup to the content script via `browser.tabs.sendMessage`. Live tab state is cached locally so reinjection can restore the current tab without relying on per-site memory, while deliberate full page reloads clear the live tab state. State is also keyed by domain when per-site sound memory is enabled. Same-tab URL changes can reset audio back to the configured default volume with Bass Boost and Voice Boost off, unless that reset is disabled in settings. Hiding the boost buttons also clears stored Bass Boost and Voice Boost state while preserving remembered volume.
+
+**Cross-origin media:** some sites stream audio/video from a third-party server that does not send the CORS headers the Web Audio API requires. Gain cannot boost those streams without silencing them, so on such sites it leaves the audio untouched, disables the popup controls, and shows a short notice instead of failing silently.
 
 ---
 
@@ -90,9 +95,11 @@ Volume changes are sent from the popup to the content script via `browser.tabs.s
 
 Sometimes when the extension first opens or activates, audio can sound echoey, robotic, or otherwise bugged. If that happens, refresh the page or reset the extension - this should clear it up.
 
-If you switch filter modes or add the current site to a block/allow list while audio is boosted, Gain resets that tab back to a neutral 100% state automatically.
+If you switch filter modes or add the current site to a block/allow list while audio is boosted, Gain resets that tab back to a neutral 100% state automatically. A site newly allowed by a mode or list change starts at your configured default volume.
 
-If audio keeps a boosted state after removing or reloading the temporary extension during development, refresh the affected page. Firefox may not give the content script enough time to tear down the page's active audio graph.
+If you reload or update the extension while a tab is boosted, that tab keeps playing at its last volume but can no longer be controlled until you refresh the page. Gain detects this, shows a "recently reloaded - please refresh" notice in the popup, and avoids layering a second audio graph over the page.
+
+If a site sounds boosted but the controls do nothing, it is likely a cross-origin media stream without CORS headers (see *How it works*) - Gain cannot process those.
 
 ---
 

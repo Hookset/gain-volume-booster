@@ -27,6 +27,7 @@ let voiceActive = false;
 let bassActive = false;
 let controlsEnabled = false;
 let siteAccessDismissed = false;
+let popupClosing = false;
 
 function getSafeFaviconUrl(url) {
   if (!url) return '';
@@ -119,6 +120,24 @@ function setControlsEnabled(enabled) {
   });
 }
 
+function closePopupForTabChange() {
+  if (popupClosing) return;
+  popupClosing = true;
+  setControlsEnabled(false);
+  window.close();
+}
+
+function handleActiveTabChanged({ tabId }) {
+  if (currentTabId === null) return;
+  if (tabId !== currentTabId) closePopupForTabChange();
+}
+
+browser.tabs.onActivated.addListener(handleActiveTabChanged);
+
+window.addEventListener('unload', () => {
+  browser.tabs.onActivated.removeListener(handleActiveTabChanged);
+});
+
 function showBlockedBanner(message) {
   blockedBanner.textContent = message;
   blockedBanner.classList.add('show');
@@ -152,7 +171,7 @@ function renderVolume(val) {
 }
 
 function commitVolume(val, { persist = true } = {}) {
-  if (!controlsEnabled || currentTabId === null) return;
+  if (popupClosing || !controlsEnabled || currentTabId === null) return;
 
   val = clampVolume(val);
 
